@@ -1,9 +1,12 @@
+import { useState } from 'react'
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
 import { useAuth } from '../auth/AuthContext'
+import ChangePasswordModal from './ChangePasswordModal'
 
 export default function Layout() {
   const { logout } = useAuth()
   const navigate = useNavigate()
+  const [changingPassword, setChangingPassword] = useState(false)
 
   function handleLogout() {
     logout()
@@ -14,8 +17,12 @@ export default function Layout() {
     <div className="app-shell">
       <header className="top-bar">
         <span className="brand">Mnemo</span>
-        <button className="link-btn" onClick={handleLogout}>Sign out</button>
+        <div className="top-bar-actions">
+          <button className="link-btn" onClick={() => setChangingPassword(true)}>Change password</button>
+          <button className="link-btn" onClick={handleLogout}>Sign out</button>
+        </div>
       </header>
+      {changingPassword && <ChangePasswordModal onClose={() => setChangingPassword(false)} />}
 
       <main className="main-content">
         <Outlet />
