@@ -70,5 +70,6 @@ def list_slots(
     out = [_slot_dict(s) for s in slots]
     if available_only:
         out = [s for s in out if s["occupant_id"] is None]
-    out.sort(key=lambda s: s["label"])
+    # Wall slots first (they're the common case), then chest slots; each by label.
+    out.sort(key=lambda s: (0 if s["kind"] == "wall" else 1, s["label"]))
     return out
