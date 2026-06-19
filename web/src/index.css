@@ -120,6 +120,10 @@ button.danger { background: var(--danger); color: #2a0d0d; }
 .picker-row .result-name { font-weight: 600; }
 .selected-container { flex-direction: row; align-items: center; justify-content: space-between; gap: 12px; }
 
+.tappable { cursor: pointer; }
+.tappable .result-main { width: 100%; }
+.edit-hint { color: var(--accent); font-size: 13px; margin-left: auto; }
+
 .muted { color: var(--muted); }
 .hint { color: var(--muted); font-size: 13px; margin: 0; }
 .error { color: var(--danger); }

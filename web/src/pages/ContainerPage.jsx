@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import api from '../api/client'
 import { CONTAINER_TYPES } from '../constants'
 import ConfirmModal from '../components/ConfirmModal'
+import PartEditModal from '../components/PartEditModal'
 
 export default function ContainerPage() {
   const { id } = useParams()
@@ -26,6 +27,7 @@ export default function ContainerPage() {
   const [editType, setEditType] = useState('other')
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [deleteError, setDeleteError] = useState('')
+  const [editingPart, setEditingPart] = useState(null)
 
   const refresh = () => {
     qc.invalidateQueries({ queryKey: ['container', id] })
@@ -138,15 +140,26 @@ export default function ContainerPage() {
       <h3>Parts ({container.parts?.length ?? 0})</h3>
       <ul className="result-list">
         {container.parts?.map((p) => (
-          <li key={p.id} className="card result">
-            <span className="result-name">{p.name}</span>
-            {p.category && <span className="chip">{p.category}</span>}
+          <li key={p.id} className="card result tappable" onClick={() => setEditingPart(p)}>
+            <div className="result-main">
+              <span className="result-name">{p.name}</span>
+              {p.category && <span className="chip">{p.category}</span>}
+              <span className="edit-hint">Edit</span>
+            </div>
             {p.tags?.length > 0 && (
               <div className="tags">{p.tags.map((t) => <span key={t} className="tag">{t}</span>)}</div>
             )}
           </li>
         ))}
       </ul>
+
+      {editingPart && (
+        <PartEditModal
+          part={editingPart}
+          onClose={() => setEditingPart(null)}
+          onSaved={refresh}
+        />
+      )}
 
       <button className="danger delete-container" onClick={() => { setDeleteError(''); setConfirmingDelete(true) }}>
         Delete container

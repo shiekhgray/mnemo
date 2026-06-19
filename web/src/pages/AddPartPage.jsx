@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import api from '../api/client'
 import { SUGGESTED_CATEGORIES } from '../constants'
+import PartEditModal from '../components/PartEditModal'
 
 // Bulk-add flow: pick a container once, then keep adding parts to it without
 // re-selecting — cataloguing a tackle box of ~30 parts should be fast (per PRD).
@@ -19,6 +20,14 @@ export default function AddPartPage() {
   const [notes, setNotes] = useState('')
   const [added, setAdded] = useState([])
   const [saving, setSaving] = useState(false)
+  const [editingPart, setEditingPart] = useState(null)
+
+  // Reflect an edit/delete from the modal back into the session list.
+  function onPartSaved({ deleted, part }) {
+    setAdded((prev) =>
+      deleted ? prev.filter((p) => p.id !== part.id) : prev.map((p) => (p.id === part.id ? part : p))
+    )
+  }
 
   async function handleAdd(e) {
     e.preventDefault()
@@ -126,13 +135,24 @@ export default function AddPartPage() {
           <h3>Added this session ({added.length})</h3>
           <ul className="result-list">
             {added.map((p) => (
-              <li key={p.id} className="card result">
-                <span className="result-name">{p.name}</span>
-                {p.category && <span className="chip">{p.category}</span>}
+              <li key={p.id} className="card result tappable" onClick={() => setEditingPart(p)}>
+                <div className="result-main">
+                  <span className="result-name">{p.name}</span>
+                  {p.category && <span className="chip">{p.category}</span>}
+                  <span className="edit-hint">Edit</span>
+                </div>
               </li>
             ))}
           </ul>
         </>
+      )}
+
+      {editingPart && (
+        <PartEditModal
+          part={editingPart}
+          onClose={() => setEditingPart(null)}
+          onSaved={onPartSaved}
+        />
       )}
     </div>
   )
