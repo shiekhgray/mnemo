@@ -1,11 +1,14 @@
 import { useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import api from '../api/client'
+import { CONTAINER_TYPES } from '../constants'
+import ConfirmModal from '../components/ConfirmModal'
 
 export default function ContainerPage() {
   const { id } = useParams()
   const qc = useQueryClient()
+  const navigate = useNavigate()
 
   const { data: container } = useQuery({
     queryKey: ['container', id],
@@ -18,6 +21,11 @@ export default function ContainerPage() {
 
   const [slotId, setSlotId] = useState('')
   const [freeform, setFreeform] = useState('')
+  const [editing, setEditing] = useState(false)
+  const [editLabel, setEditLabel] = useState('')
+  const [editType, setEditType] = useState('other')
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
 
   const refresh = () => {
     qc.invalidateQueries({ queryKey: ['container', id] })
@@ -38,16 +46,61 @@ export default function ContainerPage() {
     mutationFn: () => api.post(`/containers/${id}/bench`),
     onSuccess: refresh,
   })
+  const saveEdit = useMutation({
+    mutationFn: () => api.put(`/containers/${id}`, { label: editLabel.trim(), type: editType }),
+    onSuccess: () => { setEditing(false); refresh() },
+  })
+  const del = useMutation({
+    mutationFn: () => api.delete(`/containers/${id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['containers'] })
+      qc.invalidateQueries({ queryKey: ['benched'] })
+      navigate('/containers')
+    },
+    onError: (err) => setDeleteError(err.response?.data?.detail ?? 'Could not delete container'),
+  })
+
+  function startEdit() {
+    setEditLabel(container.label)
+    setEditType(container.type)
+    setEditing(true)
+  }
 
   if (!container) return <div className="page"><p className="muted">Loading…</p></div>
 
   return (
     <div className="page">
-      <h2>{container.label}</h2>
-      <p className={container.benched ? 'location-line benched' : 'location-line'}>
-        📍 {container.location}
-        <span className="chip">{container.type}</span>
-      </p>
+      {editing ? (
+        <div className="card">
+          <label className="field">
+            <span>Label</span>
+            <input value={editLabel} onChange={(e) => setEditLabel(e.target.value)} autoFocus />
+          </label>
+          <label className="field">
+            <span>Type</span>
+            <select value={editType} onChange={(e) => setEditType(e.target.value)}>
+              {CONTAINER_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+            </select>
+          </label>
+          <div className="modal-actions">
+            <button className="btn-secondary" onClick={() => setEditing(false)}>Cancel</button>
+            <button disabled={!editLabel.trim() || saveEdit.isPending} onClick={() => saveEdit.mutate()}>
+              {saveEdit.isPending ? 'Saving…' : 'Save'}
+            </button>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="header-row">
+            <h2>{container.label}</h2>
+            <button className="link-btn" onClick={startEdit}>Edit</button>
+          </div>
+          <p className={container.benched ? 'location-line benched' : 'location-line'}>
+            📍 {container.location}
+            <span className="chip">{container.type}</span>
+          </p>
+        </>
+      )}
 
       <div className="card">
         <h3>Move</h3>
@@ -94,6 +147,25 @@ export default function ContainerPage() {
           </li>
         ))}
       </ul>
+
+      <button className="danger delete-container" onClick={() => { setDeleteError(''); setConfirmingDelete(true) }}>
+        Delete container
+      </button>
+
+      {confirmingDelete && (
+        <ConfirmModal
+          title="Delete this container?"
+          message={
+            `“${container.label}” and its ${container.parts?.length ?? 0} part(s) will be permanently deleted.` +
+            ' This cannot be undone.'
+          }
+          confirmLabel="Delete"
+          busy={del.isPending}
+          error={deleteError}
+          onClose={() => setConfirmingDelete(false)}
+          onConfirm={() => del.mutate()}
+        />
+      )}
     </div>
   )
 }

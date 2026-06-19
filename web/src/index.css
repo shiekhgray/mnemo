@@ -108,6 +108,18 @@ button.danger { background: var(--danger); color: #2a0d0d; }
 .tags { display: flex; flex-wrap: wrap; gap: 6px; }
 .tag { background: var(--surface-2); color: var(--accent); font-size: 12px; padding: 2px 8px; border-radius: 999px; }
 
+.header-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.header-row h2 { margin: 0; }
+.delete-container { margin-top: 8px; }
+
+/* Searchable container picker (Add page) */
+.picker-row {
+  width: 100%; text-align: left; background: var(--surface); border: 1px solid var(--surface-2);
+  color: var(--text); font-weight: 400; display: flex; flex-direction: column; gap: 2px;
+}
+.picker-row .result-name { font-weight: 600; }
+.selected-container { flex-direction: row; align-items: center; justify-content: space-between; gap: 12px; }
+
 .muted { color: var(--muted); }
 .hint { color: var(--muted); font-size: 13px; margin: 0; }
 .error { color: var(--danger); }

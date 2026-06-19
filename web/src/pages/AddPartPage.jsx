@@ -12,6 +12,7 @@ export default function AddPartPage() {
   })
 
   const [containerId, setContainerId] = useState('')
+  const [containerSearch, setContainerSearch] = useState('')
   const [name, setName] = useState('')
   const [category, setCategory] = useState('')
   const [tags, setTags] = useState('')
@@ -41,23 +42,60 @@ export default function AddPartPage() {
     }
   }
 
-  const containerLabel = containers.find((c) => String(c.id) === String(containerId))?.label
+  const selected = containers.find((c) => String(c.id) === String(containerId))
+  const q = containerSearch.trim().toLowerCase()
+  const matches = q
+    ? containers.filter(
+        (c) => c.label.toLowerCase().includes(q) || (c.location ?? '').toLowerCase().includes(q)
+      )
+    : containers
 
   return (
     <div className="page">
-      <label className="field">
-        <span>Container</span>
-        <select value={containerId} onChange={(e) => setContainerId(e.target.value)}>
-          <option value="">— choose a container —</option>
-          {containers.map((c) => (
-            <option key={c.id} value={c.id}>{c.label} · {c.location}</option>
-          ))}
-        </select>
-      </label>
+      {selected ? (
+        <div className="card selected-container">
+          <div>
+            <span className="muted">Adding to</span>
+            <div className="result-name">{selected.label}</div>
+            <span className="muted">📍 {selected.location}</span>
+          </div>
+          <button className="btn-secondary" onClick={() => { setContainerId(''); setContainerSearch('') }}>
+            Change
+          </button>
+        </div>
+      ) : (
+        <div className="card">
+          <label className="field">
+            <span>Container</span>
+            <input
+              type="search"
+              value={containerSearch}
+              onChange={(e) => setContainerSearch(e.target.value)}
+              placeholder="Search containers by name or location…"
+              autoFocus
+            />
+          </label>
+          {containers.length === 0 && (
+            <p className="muted">No containers yet — create one on the Containers tab first.</p>
+          )}
+          {containers.length > 0 && matches.length === 0 && (
+            <p className="muted">No containers match “{containerSearch}”.</p>
+          )}
+          <ul className="result-list">
+            {matches.map((c) => (
+              <li key={c.id}>
+                <button className="picker-row" onClick={() => setContainerId(String(c.id))}>
+                  <span className="result-name">{c.label}</span>
+                  <span className="muted">📍 {c.location}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {containerId && (
         <form className="card add-form" onSubmit={handleAdd}>
-          <p className="muted">Adding to <strong>{containerLabel}</strong></p>
           <label className="field">
             <span>Name</span>
             <input value={name} onChange={(e) => setName(e.target.value)} autoFocus required
