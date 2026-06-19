@@ -2,79 +2,96 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Project status
+## What this is
 
-This repo currently contains **only a product definition** (`mnemo.prd`) — no code, no chosen
-tech stack, no build/test tooling. `mnemo` is an electronics parts inventory system for a single
-user (Graham) on a home Linux server. There are no build/lint/test commands to document yet; add
-them here once a stack is chosen and scaffolded.
-
-**Before writing any implementation code, the stack and several behaviors are undecided** — see
-"Decisions to confirm before building" below. Do not invent these; confirm with the user.
-
-## Primary use case
-
+`mnemo` is a single-user electronics parts inventory system for Graham's home Linux server.
 It's a **lookup-first** tool answering one question: *"Do I already have this part, and where is
-it?"* Part search (name + category + tags, full-text-ish, forgiving) from a **phone** is the single
-most important piece of UX. Quantity/low-stock tracking is explicitly **out of scope for v1**.
+it?"* Fast, forgiving part search **from a phone** is the most important UX. Quantity/low-stock
+tracking is explicitly **out of scope for v1**. The full product definition is in `mnemo.prd` — read
+it for the rationale behind the rules below.
 
-## Domain model and the rules that aren't obvious
+## Stack & layout
 
-Three entities: **Bin**, **Container**, **Part**. The non-trivial logic lives in how a Container is
-positioned.
+Mirrors the sibling `calliope` project's stack (FastAPI + React + Postgres in Docker).
+
+- `api/` — FastAPI + SQLAlchemy 2.0 + Alembic, Postgres via psycopg2, JWT auth (python-jose +
+  bcrypt). App code in `api/app/`: `config.py`, `database.py`, `models.py`, `auth.py`,
+  `positions.py`, `main.py`, and `routers/`. Migrations in `api/alembic/`, one-off seed scripts in
+  `api/scripts/`. Ubuntu-based Dockerfile runs uvicorn.
+- `web/` — React 19 + Vite + React Router 7 + TanStack Query + axios. Mobile-first. Served under the
+  `/mnemo/` base path; `web/src/api/client.js` talks to `/mnemo/api`. node:22 Dockerfile runs the
+  Vite dev server.
+- `docker-compose.yml` — wires `db` (postgres:16) + `api` + `web`. `nginx/mnemo.conf` is the reverse
+  proxy vhost for subpath deployment behind the home server's nginx.
+
+Ports are offset from calliope to coexist on the same host: api `127.0.0.1:8001`, web
+`127.0.0.1:5174`.
+
+## Commands
+
+```bash
+# Bring up the whole stack
+cp .env.example .env          # then edit DB_PASSWORD / SECRET_KEY
+docker compose up --build -d
+
+# Database migrations (run inside the api container)
+docker compose exec api alembic upgrade head
+docker compose exec api alembic revision -m "describe change"   # then edit the generated file
+
+# Seed data (inside the api container)
+docker compose exec api python scripts/seed_users.py <username> <password>
+docker compose exec api python scripts/seed_storage.py          # wall bins + chests + their slots
+
+# Frontend (from web/)
+npm install
+npm run dev        # local dev (proxies /mnemo/api to API_URL, default http://localhost:8001)
+npm run lint
+npm run build
+```
+
+There is no automated test suite yet. After backend changes, verify the app compiles
+(`python -m py_compile app/*.py app/routers/*.py`) and migrations apply cleanly.
+
+## Architecture — the domain rules that aren't obvious
+
+Three core entities — **Bin**, **Container**, **Part** — plus **Chest** and **Slot**. The
+non-trivial logic is all about how a Container is *positioned*, and it lives in
+`api/app/positions.py` (location resolution, slot assignment, benching, the nesting cap). Routers
+should call those helpers rather than re-implementing position logic.
 
 **Container is the stable unit of tracking — not its position.** Move a container, update one
-record, and everything inside follows. A Container's position is **exactly one of** four states,
-and this is the central invariant to enforce:
+record, and everything inside follows. A Container's position is **at most one of**:
+`slot_id` / `parent_container_id` / `freeform_location`; **none set = "benched."** This invariant is
+enforced both in `positions.apply_position()` and by a DB `CHECK` constraint.
 
-1. `slot_id` — a unique slot (a wall-bin drawer-slot, or a chest front/back slot)
-2. `parent_container_id` — nested inside another container
-3. `freeform_location` — a text string ("Garage, box near mains")
-4. none of the above — **"benched"** (no known position)
+Behaviors that are easy to get wrong (all in `positions.py`):
 
-Enforce "at most one set" at the API level, not just by convention.
+- **Slots are unique** (`containers.slot_id` is a UNIQUE column). Assigning a container to an
+  occupied slot **atomically bumps** the current occupant to benched — `assign_slot()` clears the
+  occupant and `flush()`es before re-assigning so the unique constraint never trips.
+- **Benching is otherwise manual.** Position is *"last known,"* not real-time truth. Two containers
+  sharing a last-known slot from an un-logged move is an **expected, acceptable** state — a hint to
+  the user, not an error to prevent. There's an explicit `/containers/{id}/bench` endpoint.
+- **Nesting is capped at 2 levels.** A container with a parent cannot itself be a parent;
+  `assign_parent()` enforces this. `resolve_location()` walks the chain part → container → parent →
+  position.
 
-**Critical behaviors (easy to get wrong):**
+**Bins vs. wall drawers:** A `Bin` defines a grid of *available* drawer-`Slot`s at one wall position
+(3×4 wall). Each wall drawer is itself a `Container` occupying a slot. `Chest` drawers similarly
+expose front/back `Slot`s for tackle boxes. Slots must be **seeded** (`seed_storage.py`) before
+containers can be assigned. Bin types and their drawer grids are documented in that script; the exact
+wall layout is the user's to edit there.
 
-- **Slots are unique.** Assigning a container to an already-occupied slot must **atomically bump**
-  the current occupant to benched. No transient double-occupancy, no orphaned slot.
-- **Benching is otherwise manual.** Position is *"last known,"* not real-time truth. Pulling a
-  drawer to the workbench is NOT logged. There is an explicit "bench this container" action for
-  deliberate reorganization. Two containers sharing a last-known slot (from an un-logged move) is an
-  **expected, acceptable state** — a hint to the user, not a system error to prevent.
-- **Nesting is capped at 2 levels.** A container with a parent cannot itself be a parent. Enforce
-  at the API level.
-- **Location resolution walks up the chain:** part → container → parent container → that parent's
-  slot/freeform position. "Get container location" must resolve any of these to a human-readable
-  string.
+**Part search** (`routers/parts.py` `/parts/search`) is forgiving ILIKE across name + category +
+tags — the primary use case. Category is a **free string** (suggestions offered via a datalist in
+`web/src/constants.js`, not enforced).
 
-**Bins vs. wall drawers:** A Bin defines a grid of *available slots* on the 3×4 wall (12 wall
-slots). Drawer types: all-narrow (8×8=64), all-wide (4×6=24), half/half (narrow top A1–H4, wide
-bottom A5–D7). Slot addresses are spreadsheet-style `<bin-id>:<col><row>` (e.g. `W-B2:C3`). Each
-wall drawer is itself a **Container** that tracks which slot it currently occupies — bins don't own
-drawers, slots do. The 12 wall bins (types + grid positions) must be **seeded** before drawers/parts
-can be assigned.
+## Conventions
 
-## Required API surface (conceptual)
-
-Search parts · get container location (resolves the chain) · add/edit part · add/edit container ·
-assign container to slot (auto-bumps occupant) · bench container (explicit) · list benched containers.
-
-## Constraints
-
-- **Mobile-first UI** — the user is standing in front of storage with a phone, or checking before
-  ordering. Optimize for that, not desktop.
-- **Self-hostable and simple to maintain** on an existing Linux home server. Prefer simple, readable
-  implementations over maximally general/flexible ones. Don't over-engineer for scale that doesn't
-  exist (single user, home network).
-- **Manual entry only** for v1 (no barcode/photo recognition).
-
-## Decisions to confirm before building (from the PRD's open questions)
-
-- **Tech stack** — nothing chosen. Lean lightweight web framework + SQLite/Postgres.
-- **Auth** — likely trusted-network-only / none; confirm.
-- **Bulk add** — cataloguing ~30 parts into one tackle box must be fast ("stay in this container,
-  keep adding" mode). Design this before building the add-part UI.
-- **Category** — free string vs. fixed enum/dropdown (search consistency vs. friction).
-
-See `mnemo.prd` for the full definition, including non-goals and the rationale behind each rule.
+- Routers accept/return plain dicts with hand-written `serialize()` helpers (matching calliope);
+  there are no Pydantic response models. Auth is enforced with
+  `dependencies=[Depends(get_current_user)]` on each protected router.
+- Alembic's `env.py` reads `DATABASE_URL` from the environment — credentials are never stored in
+  `alembic.ini`.
+- New tables/columns require a hand-written migration in `api/alembic/versions/` (autogenerate is
+  available but review the output).

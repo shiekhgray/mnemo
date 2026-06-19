@@ -1,0 +1,43 @@
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: mnemo
+      POSTGRES_USER: mnemo
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mnemo"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  web:
+    build: ./web
+    restart: unless-stopped
+    depends_on:
+      - api
+    environment:
+      API_URL: http://api:8000
+    ports:
+      - "127.0.0.1:5174:5173"
+    volumes:
+      - ./web/src:/app/src
+
+  api:
+    build: ./api
+    restart: unless-stopped
+    user: "1000:1000"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://mnemo:${DB_PASSWORD}@db:5432/mnemo
+      SECRET_KEY: ${SECRET_KEY}
+    ports:
+      - "127.0.0.1:8001:8000"
+
+volumes:
+  pg_data:
