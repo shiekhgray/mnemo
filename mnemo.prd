@@ -1,0 +1,192 @@
+# Electronics Parts Inventory System — Project Definition
+
+## Problem
+
+Graham has a large, partially organized collection of electronics parts (resistors,
+capacitors, transistors, diodes, motors, drivers, dev boards, switches, keycaps,
+soldering iron tips, wire loom, 3D printer hardware, etc.) spread across several
+physical storage systems. The collection has grown large enough that duplicate
+purchases are happening because it's hard to remember/check what's already on hand
+and where it is.
+
+## Primary Use Case (v1)
+
+**"Do I already have this part, and if so, where is it?"**
+
+This is a lookup-first tool. Quantity/low-stock tracking is explicitly out of scope
+for v1 — "running low" means different things for a reel of resistors vs. a single
+motor, and isn't worth solving yet.
+
+## Non-Goals (v1)
+
+- Quantity tracking / low-stock alerts
+- Barcode scanning or automated part recognition (manual entry only, for now)
+- Filament tracking (separate, self-contained system — easy to eyeball, not needed here)
+- Structured per-category spec fields (e.g. typed resistor tolerance/wattage fields)
+- Multi-user support / accounts (single user, home network)
+
+## Core Concepts
+
+### Container
+
+The central abstraction. A container is anything that physically holds parts:
+a wall-mounted drawer, a tackle box, a 3D-printed organizer box, or a freeform
+location like "garage, near the mains panel."
+
+Every container has:
+- **Label** — human-readable description of contents (e.g. "10k–100k resistors")
+- **Position** — exactly ONE of the following:
+  - A **slot** (see Position Types below)
+  - A **parent container** (see Nesting below)
+  - A **freeform text location** (e.g. "Closet, top shelf", "Garage, cardboard box near mains")
+  - Nothing (i.e. "benched" — see below)
+
+A container is the *stable* unit of tracking, not its position. When a container
+moves, you update one record and everything inside it follows automatically.
+
+### Part
+
+A part is an individual catalogued item.
+
+Fields (v1, intentionally minimal):
+- **Name** — freeform string (e.g. "10kΩ 1/4W through-hole resistor"). Graham is the
+  only user, so naming consistency is on him rather than enforced by the schema.
+- **Category** — freeform or simple enum (resistor, capacitor, transistor, diode,
+  motor, driver, dev board, switch, keycap, soldering tip, wire/loom, 3D printer
+  hardware, misc.)
+- **Container** — which container holds it (required)
+- **Tags** — optional list of strings, for cross-cutting grouping (e.g. "keyboard",
+  "smd", a project name) that doesn't fit neatly into category
+- **Notes** — optional freeform text
+
+Search must work well across name + category + tags (full-text style). This is the
+single most important piece of UX in the whole system — it needs to be fast and
+forgiving from a phone.
+
+## Position Types
+
+### 1. Wall-mounted bins (Acro Mills)
+
+- 12 wall slots in a 3×4 grid. Each slot holds one **bin**.
+- Bin types:
+  - **All-narrow**: 8 cols × 8 rows = 64 drawers (×4 owned)
+  - **All-wide**: 4 cols × 6 rows = 24 drawers (×8 owned)
+  - **Half/half**: narrow drawers fill the top half (8 cols × 4 rows, A1–H4),
+    wide drawers fill the bottom half (4 cols × 3 rows, A5–D7) — same physical
+    bin, row numbering continues top to bottom, column count changes at the
+    midpoint (×4 owned)
+- Drawers are addressed spreadsheet-style: column letter + row number (e.g. `C3`).
+- A full slot address looks like `<bin-id>:<col><row>` (e.g. `W-B2:C3`).
+- Each wall drawer is itself a **container** — drawers get pulled, worked with,
+  and put back, sometimes in a different bin than before. The bin only defines
+  *available slots*; the drawer (container) tracks which slot it currently occupies.
+
+### 2. Drawer chest (tackle box storage)
+
+- Chest has N numbered drawers (top to bottom).
+- Each chest drawer is long enough for two tackle boxes end-to-end: **front** and
+  **back** slots.
+- Each tackle box is a **container**. Tackle boxes hold many parts directly (no
+  sub-coordinates inside the box — it's treated as one container, many parts,
+  e.g. a single tackle box might hold 30 different capacitor values).
+
+### 3. Closet / Garage
+
+- No clean physical structure exists or is worth building (garage items are
+  frequently in cardboard boxes that get shuffled around).
+- Containers here just get a **freeform text location** string instead of a slot.
+- Still fully valid containers — same `label` + `parts` model, just no structured
+  position.
+
+### 4. Nested containers (e.g. 3D-printer-hardware drawer)
+
+- A physical drawer can hold a mix of: small printed organizer boxes (containers)
+  AND loose parts directly (e.g. a bag of desiccant, if tracked at all).
+- A container may have a **parent container** instead of a position.
+- **Nesting is capped at 2 levels.** A container that already has a parent cannot
+  itself be a parent. Enforce this at the API level.
+- Location resolution walks up the chain: part → printed box → parent drawer →
+  drawer's position (or freeform text).
+
+## Slot / Position Behavior
+
+- Slots (wall bin drawer-slots, chest front/back-slots) are **unique** — only one
+  container may occupy a given slot at a time.
+- **Assigning a container to an occupied slot automatically bumps the current
+  occupant to "benched"** (no position). This must be atomic — no orphaned
+  double-occupancy.
+- **Benching is otherwise manual, not automatic.** The system does NOT assume a
+  container is benched just because Graham physically pulled it off the wall —
+  position data is "last known," not real-time ground truth. An explicit "bench
+  this container" action/endpoint should exist for deliberate reorganizations
+  (e.g. clearing several slots before a big reshuffle), but day-to-day pulling a
+  drawer to work at the bench does not need to be logged.
+- Two containers ending up associated with the same "last known" slot due to an
+  un-logged move is an acceptable, expected edge case — not a system error. It's
+  a signal to the user that one needs updating, not something to prevent.
+
+## Required API Surface (conceptual, not literal endpoints)
+
+- **Search parts** (by name/category/tag, full-text-ish)
+- **Get container location** (resolves slot, freeform text, or parent chain to a
+  human-readable location)
+- **Add / edit part**
+- **Add / edit container**
+- **Assign container to slot** (auto-bumps existing occupant to benched)
+- **Bench container** (explicit, manual)
+- **List benched containers** (containers with no current position — useful both
+  as a "where did I leave this" view and for bulk reorg workflows)
+
+## Data Model Summary
+
+```
+Bin
+  - id
+  - type (all-narrow | all-wide | half-half)
+  - wall_position (e.g. row/col in the 3x4 wall grid)
+
+Container
+  - id
+  - label
+  - type (wall_drawer | tackle_box | printed_box | freeform | other)
+  - slot_id (nullable, FK to a unique slot — wall bin drawer-slot or chest slot)
+  - freeform_location (nullable text)
+  - parent_container_id (nullable, FK to Container; only valid if this container
+    has no slot_id and no freeform_location; parent must not itself have a parent)
+  -- exactly one of slot_id / freeform_location / parent_container_id may be set,
+     or none (= benched)
+
+Part
+  - id
+  - name
+  - category
+  - container_id (FK, required)
+  - tags (list of strings, optional)
+  - notes (optional)
+```
+
+## Tech Constraints / Preferences
+
+- Runs on Graham's existing Linux home server.
+- Needs a usable **mobile-first UI** — primary use case is standing in front of
+  storage on a phone, or checking from a phone before placing an order.
+- Manual entry only for v1 (no barcode/photo recognition).
+- Prefer simple, readable implementations over maximally general/flexible ones.
+
+## Open Questions for Implementation (not yet decided — confirm before building)
+
+- **Tech stack**: no framework, language, or database has been chosen yet. Pick
+  something simple to self-host and maintain (e.g. a lightweight web framework +
+  SQLite/Postgres) rather than over-engineering for scale that doesn't exist.
+- **Auth**: presumably single-user on home network only — confirm whether any
+  auth is needed at all, or if it's trusted-network-only.
+- **Bulk add workflow**: cataloguing a tackle box with ~30 parts at once should be
+  fast (e.g. "stay in this container, keep adding parts" mode) rather than
+  re-selecting the container each time — worth designing explicitly before
+  building the add-part UI.
+- **Category list**: decide whether category is a free string or a fixed enum/
+  dropdown. A constrained list helps search consistency but adds friction if a
+  new category comes up later.
+- **Wall bin seeding**: the 12 wall bins, their types, and their grid positions
+  need to be seeded as initial data before any drawers/parts can be assigned.
+
