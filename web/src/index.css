@@ -297,16 +297,29 @@ h3 { margin: 8px 0 0; font-size: 15px; color: var(--muted); }
   border-style: dashed; color: var(--muted); font-weight: 600;
 }
 
-/* Preset quick-pick: a row of grid sketches, the active one accented. */
-.preset-pick { display: flex; gap: 8px; }
+/* Preset quick-pick: a wrapping row of grid sketches, the active one accented. */
+.preset-pick { display: flex; flex-wrap: wrap; gap: 8px; }
 .preset-opt {
-  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px;
+  flex: 1 1 60px; display: flex; flex-direction: column; align-items: center; gap: 4px;
   background: var(--surface); border: 1px solid var(--surface-2); border-radius: 8px;
   padding: 6px; color: var(--muted); cursor: pointer; min-width: 0;
 }
 .preset-opt.active { border-color: var(--accent); color: var(--text); }
 .preset-opt .mini-cabinet.preview { width: 100%; }
 .preset-name { font-size: 11px; }
+
+/* Custom band editor: one row per band (cols × rows) plus add/remove. */
+.band-editor { display: flex; flex-direction: column; gap: 6px; }
+.band-row { display: flex; align-items: center; gap: 10px; }
+.band-row label {
+  display: flex; align-items: center; gap: 4px; font-size: 12px; color: var(--muted);
+}
+.band-row input { width: 56px; }
+.band-rm {
+  margin-left: auto; background: var(--surface-2); color: var(--muted);
+  width: 28px; height: 28px; border-radius: 6px; font-size: 16px; line-height: 1;
+}
+.band-add { align-self: flex-start; }
 
 /* Wall-cell picker inside the modal (place / move a cabinet). */
 .cell-picker { display: grid; gap: 4px; }

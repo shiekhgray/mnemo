@@ -36,23 +36,38 @@ function binRows(bin) {
     }))
 }
 
-// Physical height of a drawer row as a fraction of the unit. Every Akro-Mils unit
-// is the same outer size, but a narrow grid stacks 8 rows and a wide grid 6, so a
-// narrow row is shorter than a wide one. half-half cabinets put 4 narrow rows over
-// 3 wide ones (top half / bottom half). Narrow rows have 8 cols, wide rows 4 — we
-// key off that. Used as a flex-grow weight so rows divide the fixed cabinet box.
-function rowFlex(cells) {
-  return cells.length > 4 ? 1 / 8 : 1 / 6
+// Row height weights (flex-grow) top-to-bottom, dividing the fixed cabinet box.
+// Derived from the band model: each band is an equal vertical slice of the unit
+// (1/numBands), split evenly among its rows. This reproduces the three Akro-Mils
+// presets exactly — a single band gives uniform rows (all-narrow → 1/8, all-wide →
+// 1/6); half-half's two bands split the box in half (4 narrow rows over 3 wide) —
+// and renders arbitrary custom grids correctly (prd/layout-editor.prd). Falls back
+// to the old per-row heuristic for any bin predating grid_spec.
+function rowWeights(bin, rows) {
+  const spec = bin.grid_spec
+  if (Array.isArray(spec) && spec.length) {
+    const total = spec.reduce((n, b) => n + b.rows, 0)
+    if (total === rows.length) {
+      const out = []
+      for (const band of spec) {
+        const w = 1 / spec.length / band.rows
+        for (let r = 0; r < band.rows; r++) out.push(w)
+      }
+      return out
+    }
+  }
+  return rows.map((r) => (r.cells.length > 4 ? 1 / 8 : 1 / 6))
 }
 
 // A miniature, non-interactive sketch of one cabinet's drawer grid. Renders into a
 // fixed-aspect box (CSS) so every unit reads as the same physical size.
 function MiniCabinet({ bin }) {
   const rows = useMemo(() => binRows(bin), [bin])
+  const weights = useMemo(() => rowWeights(bin, rows), [bin, rows])
   return (
     <div className="mini-cabinet">
-      {rows.map((r) => (
-        <div key={r.row} className="mini-row" style={{ flex: rowFlex(r.cells) }}>
+      {rows.map((r, i) => (
+        <div key={r.row} className="mini-row" style={{ flex: weights[i] }}>
           {r.cells.map((c) => (
             <span
               key={c.id}
@@ -209,10 +224,11 @@ function EmptyCell({ cell, flashed, busy, onOpenDrawer }) {
 // on tap, create a container. The teleport target (flashAddress) is highlighted.
 function CabinetDetail({ bin, flashAddress, onOpenDrawer, busy }) {
   const rows = useMemo(() => binRows(bin), [bin])
+  const weights = useMemo(() => rowWeights(bin, rows), [bin, rows])
   return (
     <div className="cabinet-detail">
-      {rows.map((r) => (
-        <div key={r.row} className="drawer-row" style={{ flex: rowFlex(r.cells) }}>
+      {rows.map((r, i) => (
+        <div key={r.row} className="drawer-row" style={{ flex: weights[i] }}>
           {r.cells.map((c) => {
             const flashed = flashAddress && c.address === flashAddress
             const Cell = c.occupant_id ? OccupiedCell : EmptyCell

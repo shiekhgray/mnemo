@@ -20,26 +20,24 @@ function addressesForGrid(gridSpec) {
   return out
 }
 
-// Row height weight, matching LocationsPage.rowFlex (narrow rows shorter than wide).
-function rowFlex(cols) {
-  return cols > 4 ? 1 / 8 : 1 / 6
-}
-
-// A non-interactive sketch of a grid_spec, same look as the wall's MiniCabinet but
-// driven straight from bands rather than a bin's slots.
+// A non-interactive sketch of a grid_spec, same look (and the same band-slice row
+// weighting) as the wall's MiniCabinet, but driven straight from bands rather than a
+// bin's slots — so the preview is WYSIWYG against the finder.
 function GridPreview({ gridSpec }) {
   const rows = useMemo(() => {
+    const spec = gridSpec || []
     const out = []
-    for (const band of gridSpec || []) {
-      for (let r = 0; r < band.rows; r++) out.push(band.cols)
+    for (const band of spec) {
+      const w = 1 / spec.length / band.rows // each band an equal vertical slice
+      for (let r = 0; r < band.rows; r++) out.push({ cols: band.cols, flex: w })
     }
     return out
   }, [gridSpec])
   return (
     <div className="mini-cabinet preview">
-      {rows.map((cols, i) => (
-        <div key={i} className="mini-row" style={{ flex: rowFlex(cols) }}>
-          {Array.from({ length: cols }, (_, c) => (
+      {rows.map((row, i) => (
+        <div key={i} className="mini-row" style={{ flex: row.flex }}>
+          {Array.from({ length: row.cols }, (_, c) => (
             <span key={c} className="mini-cell" />
           ))}
         </div>
@@ -95,7 +93,14 @@ export default function CabinetEditModal({ mode, bin, cell, bins, onClose, onSav
   })
 
   const [label, setLabel] = useState(bin?.label || '')
+  // `preset` is a preset name or the literal 'custom'; `bands` holds the working band
+  // list while custom (seeded from whatever grid was selected when you switched in).
   const [preset, setPreset] = useState(bin?.type || 'all-narrow')
+  const [bands, setBands] = useState(() =>
+    bin?.type === 'custom' && Array.isArray(bin.grid_spec)
+      ? bin.grid_spec.map((b) => ({ ...b }))
+      : null,
+  )
   const [pos, setPos] = useState(
     isEdit && bin.wall_row ? { row: bin.wall_row, col: bin.wall_col } : cell || null,
   )
@@ -104,26 +109,49 @@ export default function CabinetEditModal({ mode, bin, cell, bins, onClose, onSav
   const [confirm, setConfirm] = useState(null) // { title, message } for destructive save
   const [confirmingDelete, setConfirmingDelete] = useState(false)
 
-  const presetSpec = useMemo(
-    () => presets.find((p) => p.name === preset)?.grid_spec,
-    [presets, preset],
-  )
+  // The effective grid_spec: the named preset's bands, or the custom band list.
+  const presetSpec = useMemo(() => {
+    if (preset === 'custom') return bands
+    return presets.find((p) => p.name === preset)?.grid_spec
+  }, [presets, preset, bands])
 
-  // For an edit, which occupied drawers would the new grid bench? Surviving
-  // addresses keep their occupant; removed ones bump (positions.reconcile_bin_slots).
+  // Switching to custom seeds the band editor from the currently-shown grid so it's a
+  // starting point to tweak, not a blank slate.
+  function pickPreset(name) {
+    if (name === 'custom' && !bands) {
+      const seed = presetSpec && presetSpec.length ? presetSpec : [{ cols: 4, rows: 4 }]
+      setBands(seed.map((b) => ({ ...b })))
+    }
+    setPreset(name)
+  }
+
+  function updateBand(i, key, raw) {
+    const max = key === 'cols' ? LETTERS.length : 99
+    const v = Math.max(1, Math.min(max, Number(raw) || 1))
+    setBands((bs) => bs.map((b, j) => (j === i ? { ...b, [key]: v } : b)))
+  }
+  const addBand = () => setBands((bs) => [...bs, { cols: 4, rows: 1 }])
+  const removeBand = (i) => setBands((bs) => bs.filter((_, j) => j !== i))
+
+  // For an edit, which occupied drawers would the new grid bench? Surviving addresses
+  // keep their occupant; removed ones bump (positions.reconcile_bin_slots). When the
+  // grid is unchanged every current address survives, so this is naturally empty.
   const bumped = useMemo(() => {
-    if (!isEdit || !presetSpec || preset === bin.type) return []
+    if (!isEdit || !presetSpec) return []
     const surviving = new Set(addressesForGrid(presetSpec))
     return bin.slots.filter((s) => s.occupant_id && !surviving.has(s.address))
-  }, [isEdit, presetSpec, preset, bin])
+  }, [isEdit, presetSpec, bin])
 
   async function doSave() {
     setSaving(true)
     setError('')
     try {
+      const gridBody = preset === 'custom' ? { grid_spec: bands } : { preset }
       if (isEdit) {
         const body = { label: label.trim() || null }
-        if (preset !== bin.type) body.preset = preset
+        // Send the grid only when it could have changed (a preset switch, or any
+        // custom edit) so a label-only save doesn't needlessly reconcile slots.
+        if (preset === 'custom' || preset !== bin.type) Object.assign(body, gridBody)
         await api.put(`/bins/${bin.id}`, body)
         const moved = pos && (pos.row !== bin.wall_row || pos.col !== bin.wall_col)
         if (moved) {
@@ -132,7 +160,7 @@ export default function CabinetEditModal({ mode, bin, cell, bins, onClose, onSav
       } else {
         await api.post('/bins', {
           label: label.trim() || null,
-          preset,
+          ...gridBody,
           wall_row: pos?.row ?? null,
           wall_col: pos?.col ?? null,
         })
@@ -150,7 +178,7 @@ export default function CabinetEditModal({ mode, bin, cell, bins, onClose, onSav
     if (bumped.length > 0) {
       setConfirm({
         title: 'Reshape this cabinet?',
-        message: `Switching to “${preset}” removes ${bumped.length} occupied drawer${
+        message: `The new grid removes ${bumped.length} occupied drawer${
           bumped.length === 1 ? '' : 's'
         }; ${bumped.length === 1 ? 'its' : 'their'} container${
           bumped.length === 1 ? '' : 's'
@@ -199,13 +227,62 @@ export default function CabinetEditModal({ mode, bin, cell, bins, onClose, onSav
                   type="button"
                   key={p.name}
                   className={`preset-opt${preset === p.name ? ' active' : ''}`}
-                  onClick={() => setPreset(p.name)}
+                  onClick={() => pickPreset(p.name)}
                 >
                   <GridPreview gridSpec={p.grid_spec} />
                   <span className="preset-name">{p.name}</span>
                 </button>
               ))}
+              <button
+                type="button"
+                className={`preset-opt${preset === 'custom' ? ' active' : ''}`}
+                onClick={() => pickPreset('custom')}
+              >
+                <GridPreview gridSpec={bands || [{ cols: 4, rows: 4 }]} />
+                <span className="preset-name">custom</span>
+              </button>
             </div>
+
+            {preset === 'custom' && bands && (
+              <div className="band-editor">
+                {bands.map((b, i) => (
+                  <div className="band-row" key={i}>
+                    <label>
+                      cols
+                      <input
+                        type="number"
+                        min="1"
+                        max={LETTERS.length}
+                        value={b.cols}
+                        onChange={(e) => updateBand(i, 'cols', e.target.value)}
+                      />
+                    </label>
+                    <label>
+                      rows
+                      <input
+                        type="number"
+                        min="1"
+                        value={b.rows}
+                        onChange={(e) => updateBand(i, 'rows', e.target.value)}
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      className="band-rm"
+                      onClick={() => removeBand(i)}
+                      disabled={bands.length === 1}
+                      aria-label="Remove band"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+                <button type="button" className="link-btn band-add" onClick={addBand}>
+                  + Add band
+                </button>
+              </div>
+            )}
+
             {drawerCount > 0 && (
               <em className="muted">
                 {drawerCount} drawers
