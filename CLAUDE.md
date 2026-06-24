@@ -41,7 +41,8 @@ docker compose exec api alembic revision -m "describe change"   # then edit the 
 
 # Seed data (inside the api container)
 docker compose exec api python scripts/seed_users.py <username> <password>
-docker compose exec api python scripts/seed_storage.py          # wall bins + chests + their slots
+docker compose exec api python scripts/seed_storage.py          # additive: creates missing wall bins + chests + slots
+docker compose exec api python scripts/reseed_wall.py           # REPLACE the wall with seed_storage.WALL_LAYOUT
 
 # Frontend (from web/)
 npm install
@@ -53,10 +54,16 @@ npm run build
 There is no automated test suite yet. After backend changes, verify the app compiles
 (`python -m py_compile app/*.py app/routers/*.py`) and migrations apply cleanly.
 
-The `web` container bind-mounts `web/src` into `/app/src`. Git operations that rewrite the
-working tree while the stack is up (rebase, branch rename, `git clean`) can leave the running
-container pointing at a stale inode — Vite then fails with `Failed to load url /src/main.jsx`.
-Fix: `docker compose restart web`.
+The `web` container bind-mounts `web/src` into `/app/src`, so frontend edits hot-reload live.
+Git operations that rewrite the working tree while the stack is up (rebase, branch rename,
+`git clean`) can leave the running container pointing at a stale inode — Vite then fails with
+`Failed to load url /src/main.jsx`. Fix: `docker compose restart web`.
+
+**The `api` container does NOT bind-mount** — Python code is baked into the image at build.
+`docker compose restart api` keeps running the *old* code. To pick up backend edits (including
+changes to `scripts/`), you must rebuild: `docker compose up -d --build api`. This bites when
+editing a seed script and then running it inside the container — the container imports the
+pre-edit version until rebuilt.
 
 ## Architecture — the domain rules that aren't obvious
 
@@ -91,6 +98,21 @@ wall layout is the user's to edit there.
 **Part search** (`routers/parts.py` `/parts/search`) is forgiving ILIKE across name + category +
 tags — the primary use case. Category is a **free string** (suggestions offered via a datalist in
 `web/src/constants.js`, not enforced).
+
+**Location strings vs. `location_ref`.** `resolve_location()` produces the human string
+(`slot_label()` shows the bin **label** like `Cabinet 1:A3` when set, else the code).
+`location_ref()` (also in `positions.py`) is its structured twin: `{kind: wall|chest|nested|
+freeform|benched, ...}` carried on search results and container serializers so the frontend can
+navigate without parsing the display string. The **Locations page** (`web/src/pages/LocationsPage.jsx`,
+route `/locations`) is the read-only visual finder built on it — a Wall tab (cabinet overview →
+detail + minimap, rendered straight from `GET /bins`) plus stubbed Tackle/Printer tabs; search
+results get a "take me there" action that teleports via `?tab=&bin=&address=` and flashes the drawer.
+
+**The real wall** is one wall, 3 cols × 4 rows of 12 Akro-Mils units numbered **Cabinet 1–12** in
+reading order, encoded in `seed_storage.py`'s `WALL_LAYOUT`. The photo-derived layout/geometry lives
+in the **git-ignored** `docs/WALL.md` (alongside `wall_photos/` and `bulkimport.py`, all ignored as
+personal data). Per-drawer positions are only parsed for Cabinet 1 so far; everything else is still
+`freeform_location = "Cabinet N"` pending parsing.
 
 ## Conventions
 
