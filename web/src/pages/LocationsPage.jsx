@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import api from '../api/client'
 import { useDraggable } from '../dnd/DragContext'
 import CabinetEditModal from '../components/CabinetEditModal'
+import ChestEditModal from '../components/ChestEditModal'
 
 const TABS = [
   { key: 'wall', label: 'Wall' },
@@ -365,6 +366,133 @@ function WallTab({ selectedId, setSelectedId, flashAddress, setFlashAddress }) {
   )
 }
 
+// A chest's slots grouped into drawers (front + back box per drawer), drawer order.
+function chestDrawers(chest) {
+  const byNum = new Map()
+  for (const s of chest.slots) {
+    if (!byNum.has(s.drawer_number)) byNum.set(s.drawer_number, {})
+    byNum.get(s.drawer_number)[s.box_position] = s
+  }
+  return [...byNum.entries()]
+    .sort((a, b) => a[0] - b[0])
+    .map(([n, boxes]) => ({ n, front: boxes.front, back: boxes.back }))
+}
+
+// One tackle-box slot (front/back). Tap opens its container, or creates one in the
+// empty box — mirroring the wall's drawer behavior.
+function ChestBox({ slot, onOpen }) {
+  if (!slot) return <span className="drawer-cell" />
+  return (
+    <button
+      type="button"
+      className={`drawer-cell${slot.occupant_id ? ' filled' : ''}`}
+      onClick={() => onOpen(slot)}
+    >
+      <span className="drawer-addr">{slot.box_position}</span>
+      <span className="drawer-label">{slot.occupant_label || ''}</span>
+    </button>
+  )
+}
+
+// The Tackle tab: the read-only finder for drawer chests plus an Edit-layout mode
+// for chest CRUD (prd/layout-editor.prd Phase 3).
+function TackleTab() {
+  const qc = useQueryClient()
+  const navigate = useNavigate()
+  const [editMode, setEditMode] = useState(false)
+  const [editing, setEditing] = useState(null) // { mode, chest? } for the modal
+  const { data: chests = [], isLoading } = useQuery({
+    queryKey: ['chests'],
+    queryFn: async () => (await api.get('/chests')).data,
+  })
+
+  const create = useMutation({
+    mutationFn: (slot) =>
+      api.post('/containers', { label: slot.label, type: 'other', slot_id: slot.id }),
+    onSuccess: ({ data }) => {
+      qc.invalidateQueries({ queryKey: ['chests'] })
+      navigate(`/containers/${data.id}`, { state: { rename: true } })
+    },
+  })
+
+  const openBox = (slot) => {
+    if (slot.occupant_id) navigate(`/containers/${slot.occupant_id}`)
+    else if (!create.isPending) create.mutate(slot)
+  }
+
+  const onSaved = () => {
+    qc.invalidateQueries({ queryKey: ['chests'] })
+    setEditing(null)
+  }
+
+  const editModal = editing && (
+    <ChestEditModal
+      mode={editing.mode}
+      chest={editing.chest}
+      onClose={() => setEditing(null)}
+      onSaved={onSaved}
+    />
+  )
+
+  if (isLoading) return <p className="muted">Loading chests…</p>
+
+  if (chests.length === 0) {
+    return (
+      <div className="locations-body">
+        <p className="muted">No chests yet.</p>
+        <button className="link-btn" onClick={() => setEditing({ mode: 'create' })}>
+          + Add your first chest
+        </button>
+        {editModal}
+      </div>
+    )
+  }
+
+  return (
+    <div className="locations-body">
+      <div className="edit-bar">
+        <span className="hint">
+          {editMode ? 'Tap a chest to edit, or add one.' : 'Tap a box to open or fill it.'}
+        </span>
+        <button className="link-btn" onClick={() => setEditMode((v) => !v)}>
+          {editMode ? 'Done' : 'Edit layout'}
+        </button>
+      </div>
+
+      {editMode && (
+        <button className="wall-cabinet add-cell add-chest" onClick={() => setEditing({ mode: 'create' })}>
+          + Add chest
+        </button>
+      )}
+
+      {chests.map((chest) =>
+        editMode ? (
+          <button
+            key={chest.id}
+            className="card chest-edit-row"
+            onClick={() => setEditing({ mode: 'edit', chest })}
+          >
+            <strong>{chest.label} ✎</strong>
+            <span className="muted">{chest.num_drawers} drawers</span>
+          </button>
+        ) : (
+          <div key={chest.id} className="card chest-card">
+            <h3>{chest.label}</h3>
+            {chestDrawers(chest).map((d) => (
+              <div key={d.n} className="chest-drawer">
+                <span className="chest-drawer-no">#{d.n}</span>
+                <ChestBox slot={d.front} onOpen={openBox} />
+                <ChestBox slot={d.back} onOpen={openBox} />
+              </div>
+            ))}
+          </div>
+        ),
+      )}
+      {editModal}
+    </div>
+  )
+}
+
 function StubTab({ name }) {
   return (
     <div className="locations-body">
@@ -422,7 +550,7 @@ export default function LocationsPage() {
           setFlashAddress={setFlashAddress}
         />
       )}
-      {tab === 'tackle' && <StubTab name="Tackle drawers" />}
+      {tab === 'tackle' && <TackleTab />}
       {tab === 'printer' && <StubTab name="Printer drawers" />}
     </div>
   )
