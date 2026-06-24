@@ -105,6 +105,7 @@ button.danger { background: var(--danger); color: #2a0d0d; }
   background: var(--surface-2); color: var(--muted); font-size: 12px;
   padding: 2px 8px; border-radius: 999px; white-space: nowrap;
 }
+.chip-container { background: transparent; color: var(--muted); border: 1px dashed var(--surface-2); }
 .tags { display: flex; flex-wrap: wrap; gap: 6px; }
 .tag { background: var(--surface-2); color: var(--accent); font-size: 12px; padding: 2px 8px; border-radius: 999px; }
 

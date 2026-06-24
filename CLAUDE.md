@@ -97,7 +97,11 @@ wall layout is the user's to edit there.
 
 **Part search** (`routers/parts.py` `/parts/search`) is forgiving ILIKE across name + category +
 tags — the primary use case. Category is a **free string** (suggestions offered via a datalist in
-`web/src/constants.js`, not enforced).
+`web/src/constants.js`, not enforced). It **also matches a `Container`'s own label**, so a drawer
+you've labelled but not yet catalogued (no parts inside) is still findable — those hits are deduped
+against part hits (a container already represented by a matching part is skipped) and shaped like a
+part result with `is_container: true` and an `id` of `"container-{id}"`, which the SearchPage badges
+with a dashed "container" chip.
 
 **Location strings vs. `location_ref`.** `resolve_location()` produces the human string
 (`slot_label()` shows the bin **label** like `Cabinet 1:A3` when set, else the code).
@@ -138,6 +142,17 @@ reading order, encoded in `seed_storage.py`'s `WALL_LAYOUT`. The photo-derived l
 in the **git-ignored** `docs/WALL.md` (alongside `wall_photos/` and `bulkimport.py`, all ignored as
 personal data). Per-drawer positions are only parsed for Cabinet 1 so far; everything else is still
 `freeform_location = "Cabinet N"` pending parsing.
+
+**Freeform → precise-drawer migration.** Promoting an item from a vague `freeform_location =
+"Cabinet N"` to an exact wall slot is **container surgery, not a position edit** — because labelling
+a drawer in the layout editor creates a *new, empty* `Container` in that slot, leaving the
+catalogued part stranded in its old freeform twin (two containers, same label, only one holding the
+part). Reconciling means **moving the part into the wall drawer and deleting the empty freeform
+duplicate** — done once in bulk (June 2026) for ~97 hand-placed drawers. The move must reassign the
+relationship (`part.container = drawer`), **not** `parts.remove()` — `Container.parts` is
+`cascade="all, delete-orphan"`, so a remove orphan-deletes the part. When merging a typo'd pair the
+**drawer's** label wins (it's the corrected spelling, e.g. `WM8731` over `M8731`); push the part's
+`name` to match so the part-name == container-label convention holds.
 
 ## Conventions
 

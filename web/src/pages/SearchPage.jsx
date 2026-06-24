@@ -35,7 +35,7 @@ export default function SearchPage() {
       />
 
       {debounced && !isFetching && results.length === 0 && (
-        <p className="muted">No parts match “{debounced}”.</p>
+        <p className="muted">Nothing matches “{debounced}”.</p>
       )}
 
       <ul className="result-list">
@@ -46,6 +46,7 @@ export default function SearchPage() {
               <div className="result-main">
                 <span className="result-name">{p.name}</span>
                 {p.category && <span className="chip">{p.category}</span>}
+                {p.is_container && <span className="chip chip-container">container</span>}
               </div>
               <div className="result-actions">
                 <Link className="result-location" to={`/containers/${p.container_id}`}>

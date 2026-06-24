@@ -24,10 +24,29 @@ def serialize(part: models.Part) -> dict:
     }
 
 
+def serialize_container_hit(c: models.Container) -> dict:
+    """A search result for a container matched by its own label (rather than a part
+    inside it) — e.g. a drawer you just labelled but haven't catalogued yet. Shaped
+    like a part hit so the frontend renders it uniformly; `is_container` flags it."""
+    return {
+        "id": f"container-{c.id}",
+        "name": c.label,
+        "category": None,
+        "tags": [],
+        "notes": None,
+        "container_id": c.id,
+        "container_label": c.label,
+        "location": resolve_location(c),
+        "location_ref": location_ref(c),
+        "is_container": True,
+    }
+
+
 @router.get("/search")
 def search(q: str = Query(min_length=1), db: Session = Depends(get_db)):
     """Forgiving full-text-ish search across name + category + tags. This is the
-    single most important piece of UX — fast lookup from a phone."""
+    single most important piece of UX — fast lookup from a phone. Also matches a
+    *container's* own label so an empty, not-yet-catalogued drawer is still findable."""
     like = f"%{q}%"
     parts = (
         db.query(models.Part)
@@ -42,7 +61,23 @@ def search(q: str = Query(min_length=1), db: Session = Depends(get_db)):
         .limit(100)
         .all()
     )
-    return [serialize(p) for p in parts]
+    results = [serialize(p) for p in parts]
+
+    # Containers whose own label matches, that aren't already represented by a part
+    # hit above (avoids a duplicate row when a part inside it also matched).
+    covered = {p.container_id for p in parts}
+    containers = (
+        db.query(models.Container)
+        .filter(models.Container.label.ilike(like))
+        .order_by(models.Container.label)
+        .limit(100)
+        .all()
+    )
+    results.extend(
+        serialize_container_hit(c) for c in containers if c.id not in covered
+    )
+    results.sort(key=lambda r: (r["name"] or "").lower())
+    return results[:100]
 
 
 @router.get("/{part_id}")
