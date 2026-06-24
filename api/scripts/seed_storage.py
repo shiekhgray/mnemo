@@ -2,13 +2,15 @@
 """Seed the physical storage layout: the 12 wall bins (and their drawer-slots)
 plus any drawer chests.
 
-The exact wall layout — which bin TYPE is mounted at which 3x4 grid position — is
-Graham's to set. Edit WALL_LAYOUT and CHESTS below to match the real wall, then
-run (from inside the api container):
+The wall layout below is the real one, parsed from wall_photos/ (see docs/WALL.md):
+one wall, 3 columns x 4 rows of units. Edit WALL_LAYOUT and CHESTS to match reality,
+then run (from inside the api container):
 
     python scripts/seed_storage.py
 
-Re-running is safe: existing bins/chests (matched by code/label) are skipped.
+Re-running is safe: existing bins/chests (matched by code/label) are skipped. To
+REPLACE the existing wall (e.g. swapping the old placeholder for this one) without
+double-creating, use scripts/reseed_wall.py instead.
 
 Bin types and their drawer grids (addressed spreadsheet-style, col letter + row):
     all-narrow : cols A-H x rows 1-8  = 64 drawers
@@ -40,21 +42,27 @@ def addresses_for(bin_type: str) -> list[str]:
     raise ValueError(f"unknown bin type: {bin_type}")
 
 
-# (code, type, wall_row, wall_col, label) — EDIT to match the real wall (3 rows x 4 cols).
-# This default fills the wall; adjust types/positions/labels to reality.
+# Real wall, parsed from wall_photos/ and confirmed by Graham (2026-06-24); recorded in
+# docs/WALL.md. ONE wall of 12 Akro-Mils units in a 3-col x 4-row grid (wall_row 1..4
+# top->bottom, wall_col 1..3 left->right). Units are numbered 1..12 in reading order
+# (left->right, top->bottom) regardless of how full they are — the formerly-"Blue Unit"
+# and "Empty" cells are just numbered cabinets now (Cabinet 6 has 2 filled drawers whose
+# contents aren't logged yet).
+#
+# (code, type, wall_row, wall_col, label)
 WALL_LAYOUT = [
-    ("W-A1", "all-narrow", 1, 1, ""),
-    ("W-A2", "all-narrow", 1, 2, ""),
-    ("W-A3", "all-wide",   1, 3, ""),
-    ("W-A4", "all-wide",   1, 4, ""),
-    ("W-B1", "all-narrow", 2, 1, ""),
-    ("W-B2", "all-narrow", 2, 2, ""),
-    ("W-B3", "all-wide",   2, 3, ""),
-    ("W-B4", "all-wide",   2, 4, ""),
-    ("W-C1", "half-half",  3, 1, ""),
-    ("W-C2", "half-half",  3, 2, ""),
-    ("W-C3", "half-half",  3, 3, ""),
-    ("W-C4", "half-half",  3, 4, ""),
+    ("C1",  "all-wide",   1, 1, "Cabinet 1"),
+    ("C2",  "all-wide",   1, 2, "Cabinet 2"),
+    ("C3",  "half-half",  1, 3, "Cabinet 3"),
+    ("C4",  "half-half",  2, 1, "Cabinet 4"),
+    ("C5",  "all-wide",   2, 2, "Cabinet 5"),
+    ("C6",  "half-half",  2, 3, "Cabinet 6"),    # has 2 filled drawers (contents TBD)
+    ("C7",  "all-narrow", 3, 1, "Cabinet 7"),
+    ("C8",  "all-narrow", 3, 2, "Cabinet 8"),
+    ("C9",  "all-narrow", 3, 3, "Cabinet 9"),
+    ("C10", "all-wide",   4, 1, "Cabinet 10"),
+    ("C11", "all-wide",   4, 2, "Cabinet 11"),
+    ("C12", "all-narrow", 4, 3, "Cabinet 12"),
 ]
 
 # (label, num_drawers) — each drawer gets a 'front' and 'back' tackle-box slot.

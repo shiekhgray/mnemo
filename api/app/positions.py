@@ -13,7 +13,8 @@ from app import models
 def slot_label(slot: models.Slot) -> str:
     """Human-readable address for a slot, e.g. 'W-B2:C3' or 'Tackle chest · drawer 3 · front'."""
     if slot.kind == "wall" and slot.bin is not None:
-        return f"{slot.bin.code}:{slot.address}"
+        # Prefer the human label (e.g. "Cabinet 1") over the code when one is set.
+        return f"{slot.bin.label or slot.bin.code}:{slot.address}"
     if slot.kind == "chest" and slot.chest is not None:
         return f"{slot.chest.label} · drawer {slot.drawer_number} · {slot.box_position}"
     return f"slot {slot.id}"

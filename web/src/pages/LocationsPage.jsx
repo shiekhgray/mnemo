@@ -56,8 +56,12 @@ function MiniCabinet({ bin }) {
 // The 3x4 wall, each position drawn as a mini cabinet. Used both as the cold
 // browsing overview (large, tappable) and as the in-detail minimap (small).
 function WallGrid({ bins, selectedId, onSelect, variant }) {
+  const cols = Math.max(1, ...bins.map((b) => b.wall_col || 1))
   return (
-    <div className={`wall-grid ${variant}`}>
+    <div
+      className={`wall-grid ${variant}`}
+      style={{ gridTemplateColumns: `repeat(${cols}, 1fr)` }}
+    >
       {bins.map((bin) => (
         <button
           key={bin.id}
