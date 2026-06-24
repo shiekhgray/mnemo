@@ -201,6 +201,82 @@ button.drawer-cell { cursor: pointer; }
   50% { box-shadow: 0 0 0 5px var(--accent); }
 }
 
+/* --- Drag to reorganize (prd/drag-reorg.prd) ------------------------------- */
+
+/* While a drag is active: kill text selection and the iOS long-press callout so
+   the press-and-hold reads as a lift, not a selection. */
+body.dnd-dragging {
+  -webkit-user-select: none; user-select: none; -webkit-touch-callout: none;
+}
+
+/* The floating label that follows the finger/cursor (positioned via transform). */
+.drag-ghost {
+  position: fixed; top: 0; left: 0; z-index: 100; pointer-events: none;
+  margin: -16px 0 0 -16px; /* sit centered under the contact point */
+  max-width: 160px; padding: 6px 10px;
+  background: var(--accent); color: #04222a; border-radius: 8px;
+  font-size: 12px; font-weight: 600; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.45);
+}
+
+/* Drop-target highlights — what *will* happen on release. Reuses the accent
+   vocabulary of the wall's flash. drop-bench lands on the bench sidebar. */
+.drawer-cell.drop-move { box-shadow: inset 0 0 0 2px var(--accent); }
+.drawer-cell.drop-swap {
+  box-shadow: inset 0 0 0 2px var(--accent); background: rgba(79, 176, 198, 0.2);
+}
+.drop-bench { box-shadow: inset 0 0 0 2px var(--accent) !important; }
+
+/* Success / undo toast (above the bottom tab bar). */
+.dnd-toast {
+  position: fixed; left: 50%; bottom: calc(72px + env(safe-area-inset-bottom));
+  transform: translateX(-50%); z-index: 120;
+  display: flex; align-items: center; gap: 12px;
+  max-width: calc(100% - 24px);
+  background: var(--surface-2); padding: 10px 14px; border-radius: var(--radius);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5); font-size: 13px;
+}
+.dnd-undo {
+  background: none; border: none; color: var(--accent);
+  font-weight: 600; padding: 2px 4px; cursor: pointer;
+}
+
+/* --- The bench sidebar (collapsible, every page) --------------------------- */
+.bench-sidebar { position: fixed; z-index: 30; display: flex; background: var(--surface); }
+.bench-handle {
+  background: var(--surface-2); border: none; color: var(--text);
+  display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 13px;
+  box-shadow: 0 0 12px rgba(0, 0, 0, 0.35);
+}
+.bench-handle-label { font-weight: 600; }
+.bench-body { overflow: auto; padding: 8px; }
+.bench-empty { margin: 8px 4px; }
+.bench-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.bench-chip {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--surface-2); border: 1px solid var(--surface-2);
+  border-radius: 999px; padding: 6px 10px; color: var(--text); font-size: 12px;
+  cursor: pointer;
+}
+.bench-chip-label { max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* Left-edge dock (viewport wider than tall): a vertical handle on the left,
+   body sliding out to its right. */
+.bench-sidebar.dock-left {
+  top: calc(48px + env(safe-area-inset-top)); bottom: 0; left: 0; flex-direction: row;
+}
+.bench-sidebar.dock-left .bench-handle { writing-mode: vertical-rl; padding: 14px 6px; }
+.bench-sidebar.dock-left .bench-body { width: 220px; max-width: 60vw; }
+
+/* Bottom-sheet dock (viewport taller than wide): a full-width handle above the
+   tab bar, body as a sheet beneath it. */
+.bench-sidebar.dock-bottom {
+  left: 0; right: 0; bottom: calc(54px + env(safe-area-inset-bottom)); flex-direction: column;
+}
+.bench-sidebar.dock-bottom .bench-handle { width: 100%; justify-content: center; padding: 8px; }
+.bench-sidebar.dock-bottom .bench-body { max-height: 38vh; }
+
 /* Login */
 .login-page { min-height: 100vh; display: grid; place-items: center; padding: 16px; }
 .login-form { width: 100%; max-width: 340px; }

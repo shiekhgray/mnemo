@@ -6,7 +6,6 @@ import SearchPage from './pages/SearchPage'
 import AddPartPage from './pages/AddPartPage'
 import ContainersPage from './pages/ContainersPage'
 import ContainerPage from './pages/ContainerPage'
-import BenchedPage from './pages/BenchedPage'
 import LocationsPage from './pages/LocationsPage'
 
 function RequireAuth({ children }) {
@@ -28,7 +27,8 @@ export default function App() {
         <Route path="add" element={<AddPartPage />} />
         <Route path="containers" element={<ContainersPage />} />
         <Route path="containers/:id" element={<ContainerPage />} />
-        <Route path="benched" element={<BenchedPage />} />
+        {/* The bench is now an every-page sidebar; redirect any lingering links. */}
+        <Route path="benched" element={<Navigate to="/locations" replace />} />
         <Route path="locations" element={<LocationsPage />} />
       </Route>
     </Routes>

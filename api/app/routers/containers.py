@@ -5,7 +5,7 @@ from app import models
 from app.auth import get_current_user
 from app.database import get_db
 from app.positions import (
-    apply_position, assign_slot, bench, location_ref, resolve_location,
+    apply_position, assign_slot, bench, location_ref, resolve_location, swap_slot,
 )
 
 router = APIRouter(
@@ -126,6 +126,25 @@ def assign_slot_endpoint(container_id: int, body: dict, db: Session = Depends(ge
     if slot_id is None:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "slot_id is required")
     assign_slot(db, c, slot_id)
+    db.commit()
+    db.refresh(c)
+    return serialize(c, db)
+
+
+@router.post("/{container_id}/swap-slot")
+def swap_slot_endpoint(container_id: int, body: dict, db: Session = Depends(get_db)):
+    """Trade this container's slot with the occupant of the target slot — neither
+    is benched (cf. assign-slot, which bumps the occupant). For drag-onto-occupied.
+
+    `expected_source_slot_id` (optional) guards against a stale board: if this
+    container has moved since the client loaded the wall, the swap is rejected."""
+    c = db.get(models.Container, container_id)
+    if c is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Container not found")
+    slot_id = body.get("slot_id")
+    if slot_id is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "slot_id is required")
+    swap_slot(db, c, slot_id, body.get("expected_source_slot_id"))
     db.commit()
     db.refresh(c)
     return serialize(c, db)

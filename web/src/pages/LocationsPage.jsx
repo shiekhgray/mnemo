@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import api from '../api/client'
+import { useDraggable } from '../dnd/DragContext'
 
 const TABS = [
   { key: 'wall', label: 'Wall' },
@@ -87,9 +88,75 @@ function WallGrid({ bins, selectedId, onSelect, variant }) {
   )
 }
 
-// One cabinet, full size: every drawer is a tappable cell. Occupied drawers open
-// their container's edit page; empty ones create a container in that slot and open
-// it ready to name. The teleport target (flashAddress) is highlighted.
+// A drawer cell's class and the drop-target data attributes the drag layer reads
+// (prd/drag-reorg.prd). Every cell is a drop zone; occupied cells are also drag
+// sources (see OccupiedCell). The data-* attrs let DragContext hit-test the cell
+// under the finger without going through React.
+function cellClass(cell, flashed) {
+  return `drawer-cell${cell.occupant_id ? ' filled' : ''}${flashed ? ' flash' : ''}`
+}
+function dropAttrs(cell) {
+  return {
+    'data-drop-id': cell.id,
+    'data-drop-kind': 'slot',
+    'data-slot-id': cell.id,
+    'data-occupant-id': cell.occupant_id || undefined,
+    'data-occupant-label': cell.occupant_label || undefined,
+  }
+}
+function CellInner({ cell }) {
+  return (
+    <>
+      <span className="drawer-addr">{cell.address}</span>
+      <span className="drawer-label">{cell.occupant_label || ''}</span>
+    </>
+  )
+}
+
+// An occupied drawer: tap opens its container, long-press lifts it to drag (move /
+// swap / bench). fromSlotId is the *slot* id this container currently sits in.
+function OccupiedCell({ cell, flashed, busy, onOpenDrawer }) {
+  const drag = useDraggable(
+    {
+      kind: 'drawer',
+      containerId: cell.occupant_id,
+      label: cell.occupant_label || '(unnamed)',
+      fromSlotId: cell.id,
+    },
+    { onTap: () => onOpenDrawer(cell) },
+  )
+  return (
+    <button
+      type="button"
+      className={cellClass(cell, flashed)}
+      disabled={busy}
+      {...dropAttrs(cell)}
+      {...drag}
+    >
+      <CellInner cell={cell} />
+    </button>
+  )
+}
+
+// An empty drawer: nothing to drag, but still a valid drop target. Tap creates a
+// container in this slot (the existing behavior).
+function EmptyCell({ cell, flashed, busy, onOpenDrawer }) {
+  return (
+    <button
+      type="button"
+      className={cellClass(cell, flashed)}
+      disabled={busy}
+      {...dropAttrs(cell)}
+      onClick={() => onOpenDrawer(cell)}
+    >
+      <CellInner cell={cell} />
+    </button>
+  )
+}
+
+// One cabinet, full size: every drawer is a tappable cell and a drop target.
+// Occupied drawers are draggable (move/swap/bench); empty ones accept drops and,
+// on tap, create a container. The teleport target (flashAddress) is highlighted.
 function CabinetDetail({ bin, flashAddress, onOpenDrawer, busy }) {
   const rows = useMemo(() => binRows(bin), [bin])
   return (
@@ -98,18 +165,15 @@ function CabinetDetail({ bin, flashAddress, onOpenDrawer, busy }) {
         <div key={r.row} className="drawer-row" style={{ flex: rowFlex(r.cells) }}>
           {r.cells.map((c) => {
             const flashed = flashAddress && c.address === flashAddress
-            const cls = `drawer-cell${c.occupant_id ? ' filled' : ''}${flashed ? ' flash' : ''}`
+            const Cell = c.occupant_id ? OccupiedCell : EmptyCell
             return (
-              <button
+              <Cell
                 key={c.id}
-                type="button"
-                className={cls}
-                disabled={busy}
-                onClick={() => onOpenDrawer(c)}
-              >
-                <span className="drawer-addr">{c.address}</span>
-                <span className="drawer-label">{c.occupant_label || ''}</span>
-              </button>
+                cell={c}
+                flashed={flashed}
+                busy={busy}
+                onOpenDrawer={onOpenDrawer}
+              />
             )
           })}
         </div>

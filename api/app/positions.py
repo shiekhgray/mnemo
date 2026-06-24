@@ -90,6 +90,67 @@ def assign_slot(db: Session, container: models.Container, slot_id: int) -> None:
     container.slot_id = slot_id
 
 
+def swap_slot(
+    db: Session,
+    container: models.Container,
+    target_slot_id: int,
+    expected_source_slot_id: int | None = None,
+) -> None:
+    """Trade a placed container's slot with the occupant of ``target_slot_id``.
+
+    Unlike :func:`assign_slot` (which *bumps* an occupant to benched), a swap is
+    symmetric: the dragged container takes the target slot and the target's
+    occupant takes the dragged container's old slot — neither benched. This is the
+    right semantics for a drag-onto-occupied gesture ("trade places"), where a
+    silent bump-to-benched would be a surprise. Caller commits.
+
+    Like ``assign_slot``, the unique ``containers.slot_id`` column means we must
+    clear both slots and ``flush()`` before re-assigning, so uniqueness is never
+    tripped mid-swap.
+    """
+    source_slot_id = container.slot_id
+    if source_slot_id is None:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Container is not in a slot; use assign-slot to place it",
+        )
+    # Guard against a stale board: the client computed this swap against a view of
+    # the wall that may have moved under it. Reject rather than swap the wrong pair.
+    if expected_source_slot_id is not None and source_slot_id != expected_source_slot_id:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            "Container has moved since the board was loaded — refresh and retry",
+        )
+    if target_slot_id == source_slot_id:
+        return  # dropped onto itself — no-op
+
+    target = db.get(models.Slot, target_slot_id)
+    if target is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "Slot not found")
+
+    occupant = (
+        db.query(models.Container)
+        .filter(
+            models.Container.slot_id == target_slot_id,
+            models.Container.id != container.id,
+        )
+        .first()
+    )
+    if occupant is None:
+        # Target turned out to be empty (e.g. its occupant was moved meanwhile) —
+        # degrade to an ordinary move rather than failing the gesture.
+        container.slot_id = None
+        db.flush()
+        container.slot_id = target_slot_id
+        return
+
+    container.slot_id = None
+    occupant.slot_id = None
+    db.flush()  # release both unique slot_ids before cross-assigning
+    container.slot_id = target_slot_id
+    occupant.slot_id = source_slot_id
+
+
 def assign_parent(db: Session, container: models.Container, parent_id: int) -> None:
     """Nest a container inside a parent. Enforces the 2-level cap. Caller commits."""
     if parent_id == container.id:
