@@ -7,8 +7,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 `mnemo` is a single-user electronics parts inventory system for Graham's home Linux server.
 It's a **lookup-first** tool answering one question: *"Do I already have this part, and where is
 it?"* Fast, forgiving part search **from a phone** is the most important UX. Quantity/low-stock
-tracking is explicitly **out of scope for v1**. The full product definition is in `mnemo.prd` — read
-it for the rationale behind the rules below.
+tracking is explicitly **out of scope for v1**. The full product definition is in `prd/mnemo.prd` —
+read it for the rationale behind the rules below. Feature PRDs live alongside it in `prd/` (e.g.
+`prd/locations.prd`, the visual location finder).
 
 ## Stack & layout
 
@@ -51,6 +52,11 @@ npm run build
 
 There is no automated test suite yet. After backend changes, verify the app compiles
 (`python -m py_compile app/*.py app/routers/*.py`) and migrations apply cleanly.
+
+The `web` container bind-mounts `web/src` into `/app/src`. Git operations that rewrite the
+working tree while the stack is up (rebase, branch rename, `git clean`) can leave the running
+container pointing at a stale inode — Vite then fails with `Failed to load url /src/main.jsx`.
+Fix: `docker compose restart web`.
 
 ## Architecture — the domain rules that aren't obvious
 

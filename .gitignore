@@ -4,3 +4,8 @@ __pycache__/
 *.pyc
 .DS_Store
 node_modules/
+
+# Personal / instance-specific data — keep the published codebase generic.
+# These describe Graham's particular wall and aren't useful to others.
+wall_photos/
+docs/WALL.md

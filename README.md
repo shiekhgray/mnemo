@@ -2,7 +2,8 @@
 
 A (fully vibecoded) single-user electronics parts inventory for a home Linux server. Answers one question well:
 **"Do I already have this part, and where is it?"** — optimized for fast, forgiving search from a
-phone. See [`mnemo.prd`](mnemo.prd) for the full product definition.
+phone. See [`prd/mnemo.prd`](prd/mnemo.prd) for the full product definition, and
+[`prd/locations.prd`](prd/locations.prd) for the visual location-finder feature.
 
 ## Stack
 

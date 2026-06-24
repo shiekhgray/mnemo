@@ -1,0 +1,159 @@
+# Visual Location Finder — Feature Definition
+
+> Feature addendum to `mnemo.prd`. Read that first for the core product, data model,
+> and the lookup-first philosophy this builds on.
+
+## Problem
+
+Search already answers *"do I have this part?"* well. But the *"where is it?"* half is
+currently a bare text string — e.g. `W-A3:A1` — which is abstract and easy to
+misread. Standing in front of the wall on a phone, the user has to mentally decode a
+bin code and a spreadsheet address into a physical spot. The location data is all
+there; it just isn't *shown* in a way that maps to the physical world.
+
+This feature adds a **visual location finder**: a Locations page that renders storage
+roughly the way it physically looks, and a way to jump straight from a search result
+to the exact spot, highlighted.
+
+## Goal
+
+Turn a search hit into "look here" with one tap. When a part is found, the user should
+be able to see — spatially — which cabinet it's in (on the whole wall) and which
+drawer within that cabinet, without decoding a code.
+
+This is a **presentation feature**. The data model from `mnemo.prd` is sound and is
+*not* being re-architected. The only backend change is a small structured-location
+field to drive navigation/highlighting (see API Requirements).
+
+## Non-Goals (this iteration)
+
+- **Editing the layout from the page** — no bin/slot/cabinet CRUD, no drag-and-drop
+  reorganization. The page is read-only; assignment still happens via the existing
+  assign-slot flow.
+- **Functional Tackle and Printer tabs** — they exist as stubs only this round (see
+  Tabs). Only the Wall tab is built out.
+- **Pixel-accurate rendering** — a *rough* layout is the explicit target. Cells are
+  cells; drawer width/depth and real-world proportions are not modeled.
+- **A schema migration** — the wall renders from data the API already returns.
+
+## Core Concept: detail view + wall minimap
+
+The wall is two levels — the whole wall is a grid of cabinets, and each cabinet is a
+grid of drawers. Rather than force the user to drill down through both, the Wall tab
+combines a **zoomed detail view** with a **persistent minimap locator**:
+
+- **Detail view (main pane):** one cabinet (one Acro Mills bin) rendered as its drawer
+  grid. Each cell shows the drawer's label (or reads empty). A target drawer can be
+  **highlighted/flashed**.
+- **Minimap (corner inset):** the entire wall in miniature — all 12 cabinets in their
+  3×4 wall positions — with the currently-shown cabinet lit up. The minimap doubles as
+  the **navigator**: tapping a cabinet in it switches the detail view to that cabinet.
+
+This gives spatial context ("bin 3 is top-middle of the wall") while keeping the
+useful detail on screen, and it suits the search→teleport flow: we land directly on
+the right cabinet instead of making the user navigate there.
+
+### Two entry states
+
+- **Browsing** (open Locations cold): the main pane shows the **wall overview** — all
+  12 cabinets at once. Tapping a cabinet promotes it to the detail view, and the
+  overview shrinks into the corner minimap.
+- **Teleporting** (arriving from a search result): jump straight to the detail view of
+  the correct cabinet, with the target drawer flashing and the minimap lit on that
+  cabinet.
+
+## Tabs
+
+The page is organized by storage type, mapping to the position types in `mnemo.prd`:
+
+| Tab | Backing data | This iteration |
+| --- | --- | --- |
+| **Wall** | `Bin`s + their drawer `Slot`s | **Fully built** (detail + minimap) |
+| **Tackle drawers** | the tackle `Chest` (drawers × front/back slots) | **Stub** |
+| **Printer drawers** | the printer chest (drawers × nested boxes) | **Stub** |
+
+### Tab shapes (for when the stubs are built out later)
+
+Each storage type renders to its natural shape, not a forced grid:
+
+- **Wall** — nested grid (cabinet of drawer-cells), as above.
+- **Tackle drawers** — a vertical list of numbered drawers, each showing its **front**
+  and **back** occupant.
+- **Printer drawers** — a list of drawers, each expanding to the **3D-printed boxes**
+  it holds (tap a box → its parts). This chest is a furniture chest of drawers with
+  loose printed boxes; it is modeled with **nesting**, not unique slots: a per-drawer
+  container holds the boxes as child containers, parts live in the boxes
+  (drawer → box → parts, within the 2-level nesting cap). No new entity required.
+
+"Take me there" works identically across all three: select tab → select drawer →
+highlight the target container.
+
+## Search Integration
+
+- **Keep the result list.** Forgiving search returns multiple matches and the user
+  needs to choose — teleporting on the single first hit is wrong. The list stays.
+- Each result gains a **"take me there"** action that navigates to the Locations page,
+  selects the correct tab, opens the correct cabinet/drawer, and highlights the target.
+- The existing **container-detail link is retained** (for viewing/editing). So a result
+  exposes two distinct actions: *details* and *go there*.
+- A result whose container is **benched / freeform / nested-only** has no wall spot to
+  fly to; "take me there" should degrade gracefully (e.g. show the freeform string or
+  route to the relevant tab/parent rather than a dead highlight).
+
+## API Requirements
+
+The Wall detail view and minimap render entirely from the **existing** `GET /bins`
+response: each bin carries its slots, and each slot carries its `address` and current
+`occupant_label`. The cabinet's grid can be derived from the slot addresses
+themselves (column letters × row numbers), so **no migration is needed** to render.
+
+The one addition is a **structured location reference** to drive teleport + highlight,
+alongside the existing human-readable `location` string on search results (and ideally
+on the container-location endpoint). Conceptually:
+
+```
+location_ref:
+  kind: wall | chest | nested | freeform | benched
+  # when kind == wall:
+  bin_id, bin_code, address
+  # when kind == chest:
+  chest_id, drawer_number, box_position
+  # when kind == nested:
+  parent_container_id
+  # when kind == freeform:
+  text
+```
+
+This lets the frontend decide which tab/cabinet/drawer to open and what to flash,
+without parsing the display string.
+
+## Dependencies / Relationship to Other Work
+
+- **Faithful rendering depends on accurate seed data.** The page will happily render
+  whatever bins/geometry exist; for the drawing to match the real wall, the wall must
+  be seeded to match reality (correct cabinet geometries and positions). That accurate
+  seeding — plus the import producing one container per physical drawer (with multiple
+  parts when a drawer has multiple labels) — is a **separate, parallel track** and not
+  a blocker for building this page.
+- **Display label vs code.** Locations currently show the bin `code` (e.g. `W-A3`).
+  Showing the bin's human label when present (e.g. `Cabinet 1`) is a small, related
+  polish item worth folding in.
+
+## Build Phasing
+
+1. **Wall tab** — overview → cabinet detail + corner minimap, rendered from current
+   `/bins`. Works even against the placeholder wall.
+2. **`location_ref`** on search results; wire the "take me there" button to teleport
+   and highlight.
+3. **Stub** the Tackle and Printer tabs (visible, labeled "coming soon").
+
+## Open Questions
+
+- **Minimap placement on a phone** — a true corner inset can be cramped on a narrow
+  screen. Confirm whether it stays a small persistent inset, collapses to a toggle, or
+  sits as a strip above/below the detail view on mobile.
+- **Highlight lifetime** — does the flashed drawer stay highlighted until dismissed, or
+  fade after a moment? (Leaning: persist until the user navigates, so it survives
+  scrolling to find it.)
+- **Empty cabinets** — three wall units are currently empty. Show them as empty
+  cabinets in the overview/minimap, or hide them until populated?
