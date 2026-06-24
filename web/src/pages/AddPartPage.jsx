@@ -3,6 +3,8 @@ import { useQuery } from '@tanstack/react-query'
 import api from '../api/client'
 import { SUGGESTED_CATEGORIES } from '../constants'
 import PartEditModal from '../components/PartEditModal'
+import CountField from '../components/CountField'
+import { countLabel, countPayload } from '../lib/count'
 
 // Bulk-add flow: pick a container once, then keep adding parts to it without
 // re-selecting — cataloguing a tackle box of ~30 parts should be fast (per PRD).
@@ -18,6 +20,8 @@ export default function AddPartPage() {
   const [category, setCategory] = useState('')
   const [tags, setTags] = useState('')
   const [notes, setNotes] = useState('')
+  const [count, setCount] = useState('')
+  const [countIsMany, setCountIsMany] = useState(false)
   const [added, setAdded] = useState([])
   const [saving, setSaving] = useState(false)
   const [editingPart, setEditingPart] = useState(null)
@@ -40,12 +44,15 @@ export default function AddPartPage() {
         container_id: Number(containerId),
         tags: tags.split(',').map((t) => t.trim()).filter(Boolean),
         notes: notes.trim() || null,
+        ...countPayload(count, countIsMany),
       })
       setAdded((prev) => [data, ...prev])
       // Stay in the container; clear the per-part fields, keep category sticky.
       setName('')
       setTags('')
       setNotes('')
+      setCount('')
+      setCountIsMany(false)
     } finally {
       setSaving(false)
     }
@@ -122,6 +129,7 @@ export default function AddPartPage() {
             <span>Tags <em className="muted">(comma-separated)</em></span>
             <input value={tags} onChange={(e) => setTags(e.target.value)} placeholder="smd, keyboard" />
           </label>
+          <CountField count={count} setCount={setCount} isMany={countIsMany} setIsMany={setCountIsMany} />
           <label className="field">
             <span>Notes</span>
             <input value={notes} onChange={(e) => setNotes(e.target.value)} />
@@ -139,6 +147,7 @@ export default function AddPartPage() {
                 <div className="result-main">
                   <span className="result-name">{p.name}</span>
                   {p.category && <span className="chip">{p.category}</span>}
+                  {countLabel(p) && <span className="chip chip-count">{countLabel(p)}</span>}
                   <span className="edit-hint">Edit</span>
                 </div>
               </li>

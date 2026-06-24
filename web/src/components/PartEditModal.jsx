@@ -2,6 +2,8 @@ import { useState } from 'react'
 import api from '../api/client'
 import { SUGGESTED_CATEGORIES } from '../constants'
 import ConfirmModal from './ConfirmModal'
+import CountField from './CountField'
+import { countPayload } from '../lib/count'
 
 // Edit or delete a single part. onSaved is called with { deleted, part } so the
 // parent can refresh (a query) or update local state (the bulk-add session list).
@@ -10,6 +12,8 @@ export default function PartEditModal({ part, onClose, onSaved }) {
   const [category, setCategory] = useState(part.category ?? '')
   const [tags, setTags] = useState((part.tags ?? []).join(', '))
   const [notes, setNotes] = useState(part.notes ?? '')
+  const [count, setCount] = useState(part.count != null ? String(part.count) : '')
+  const [countIsMany, setCountIsMany] = useState(Boolean(part.count_is_many))
   const [error, setError] = useState('')
   const [saving, setSaving] = useState(false)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
@@ -26,6 +30,7 @@ export default function PartEditModal({ part, onClose, onSaved }) {
         category: category.trim() || null,
         tags: tags.split(',').map((t) => t.trim()).filter(Boolean),
         notes: notes.trim() || null,
+        ...countPayload(count, countIsMany),
       })
       onSaved({ deleted: false, part: data })
       onClose()
@@ -69,6 +74,7 @@ export default function PartEditModal({ part, onClose, onSaved }) {
             <span>Tags <em className="muted">(comma-separated)</em></span>
             <input value={tags} onChange={(e) => setTags(e.target.value)} />
           </label>
+          <CountField count={count} setCount={setCount} isMany={countIsMany} setIsMany={setCountIsMany} />
           <label className="field">
             <span>Notes</span>
             <input value={notes} onChange={(e) => setNotes(e.target.value)} />

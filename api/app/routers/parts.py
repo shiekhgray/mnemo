@@ -10,6 +10,23 @@ from app.positions import location_ref, resolve_location
 router = APIRouter(prefix="/parts", tags=["parts"], dependencies=[Depends(get_current_user)])
 
 
+def parse_count(body: dict) -> tuple[int | None, bool]:
+    """Resolve the (count, count_is_many) pair from a request body. "many" wins and
+    forces count to NULL; an empty/absent count means unspecified."""
+    if body.get("count_is_many"):
+        return None, True
+    raw = body.get("count")
+    if raw in (None, ""):
+        return None, False
+    try:
+        n = int(raw)
+    except (TypeError, ValueError):
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "count must be a whole number")
+    if n < 0:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "count cannot be negative")
+    return n, False
+
+
 def serialize(part: models.Part) -> dict:
     return {
         "id": part.id,
@@ -17,6 +34,8 @@ def serialize(part: models.Part) -> dict:
         "category": part.category,
         "tags": part.tags or [],
         "notes": part.notes,
+        "count": part.count,
+        "count_is_many": part.count_is_many,
         "container_id": part.container_id,
         "container_label": part.container.label if part.container else None,
         "location": resolve_location(part.container) if part.container else None,
@@ -34,6 +53,8 @@ def serialize_container_hit(c: models.Container) -> dict:
         "category": None,
         "tags": [],
         "notes": None,
+        "count": None,
+        "count_is_many": False,
         "container_id": c.id,
         "container_label": c.label,
         "location": resolve_location(c),
@@ -99,12 +120,15 @@ def create_part(body: dict, db: Session = Depends(get_db)):
     if not name:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, "name is required")
 
+    count, count_is_many = parse_count(body)
     part = models.Part(
         name=name,
         category=body.get("category"),
         container_id=container_id,
         tags=body.get("tags") or [],
         notes=body.get("notes"),
+        count=count,
+        count_is_many=count_is_many,
     )
     db.add(part)
     db.commit()
@@ -133,6 +157,8 @@ def update_part(part_id: int, body: dict, db: Session = Depends(get_db)):
         part.tags = body["tags"] or []
     if "notes" in body:
         part.notes = body["notes"]
+    if "count" in body or "count_is_many" in body:
+        part.count, part.count_is_many = parse_count(body)
 
     db.commit()
     db.refresh(part)

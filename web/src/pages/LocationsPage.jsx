@@ -170,11 +170,19 @@ function dropAttrs(cell) {
     'data-occupant-label': cell.occupant_label || undefined,
   }
 }
+// A compact "N types" badge for a drawer holding several distinct parts. Hidden for
+// 0–1 types so single-item drawers (the common case) stay uncluttered.
+function TypesBadge({ count }) {
+  if (!count || count < 2) return null
+  return <span className="drawer-types">{count} types</span>
+}
+
 function CellInner({ cell }) {
   return (
     <>
       <span className="drawer-addr">{cell.address}</span>
       <span className="drawer-label">{cell.occupant_label || ''}</span>
+      <TypesBadge count={cell.occupant_part_count} />
     </>
   )
 }
@@ -393,6 +401,7 @@ function ChestBox({ slot, onOpen }) {
     >
       <span className="drawer-addr">{slot.box_position}</span>
       <span className="drawer-label">{slot.occupant_label || ''}</span>
+      <TypesBadge count={slot.occupant_part_count} />
     </button>
   )
 }

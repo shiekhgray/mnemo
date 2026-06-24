@@ -30,6 +30,9 @@ def _slot_dict(slot: models.Slot) -> dict:
         "box_position": slot.box_position,
         "occupant_id": occupant.id if occupant else None,
         "occupant_label": occupant.label if occupant else None,
+        # Number of distinct parts in the occupant — the Locations grid badges this
+        # as "N types" so a box of many boards reads at a glance without the list.
+        "occupant_part_count": len(occupant.parts) if occupant else 0,
     }
 
 

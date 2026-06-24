@@ -60,7 +60,15 @@ def get_container(container_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Container not found")
     out = serialize(c, db)
     out["parts"] = [
-        {"id": p.id, "name": p.name, "category": p.category, "tags": p.tags or []}
+        {
+            "id": p.id,
+            "name": p.name,
+            "category": p.category,
+            "tags": p.tags or [],
+            "notes": p.notes,
+            "count": p.count,
+            "count_is_many": p.count_is_many,
+        }
         for p in sorted(c.parts, key=lambda p: p.name)
     ]
     out["children"] = [

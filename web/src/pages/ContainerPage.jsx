@@ -2,10 +2,12 @@ import { useState } from 'react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import api from '../api/client'
-import { CONTAINER_TYPES } from '../constants'
+import { CONTAINER_TYPES, SUGGESTED_CATEGORIES } from '../constants'
 import ConfirmModal from '../components/ConfirmModal'
 import PartEditModal from '../components/PartEditModal'
+import CountField from '../components/CountField'
 import { takeMeThereTo } from '../lib/takeMeThere'
+import { countLabel, countPayload, itemTotalLabel } from '../lib/count'
 
 export default function ContainerPage() {
   const { id } = useParams()
@@ -32,6 +34,13 @@ export default function ContainerPage() {
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [deleteError, setDeleteError] = useState('')
   const [editingPart, setEditingPart] = useState(null)
+  // Inline "add part" form — list multiple counted items in one box without
+  // leaving for the Add tab. Stays open after each add for rapid entry.
+  const [addingPart, setAddingPart] = useState(false)
+  const [npName, setNpName] = useState('')
+  const [npCategory, setNpCategory] = useState('')
+  const [npCount, setNpCount] = useState('')
+  const [npMany, setNpMany] = useState(false)
 
   const refresh = () => {
     qc.invalidateQueries({ queryKey: ['container', id] })
@@ -55,6 +64,19 @@ export default function ContainerPage() {
   const saveEdit = useMutation({
     mutationFn: () => api.put(`/containers/${id}`, { label: editLabel.trim(), type: editType }),
     onSuccess: () => { setEditing(false); refresh() },
+  })
+  const addPart = useMutation({
+    mutationFn: () => api.post('/parts', {
+      name: npName.trim(),
+      category: npCategory.trim() || null,
+      container_id: Number(id),
+      ...countPayload(npCount, npMany),
+    }),
+    onSuccess: () => {
+      // Keep the form open and category sticky; clear name + count for the next item.
+      setNpName(''); setNpCount(''); setNpMany(false)
+      qc.invalidateQueries({ queryKey: ['container', id] })
+    },
   })
   const del = useMutation({
     mutationFn: () => api.delete(`/containers/${id}`),
@@ -147,13 +169,50 @@ export default function ContainerPage() {
         </div>
       )}
 
-      <h3>Parts ({container.parts?.length ?? 0})</h3>
+      <div className="header-row">
+        <h3>
+          Parts ({container.parts?.length ?? 0})
+          {itemTotalLabel(container.parts) && (
+            <span className="muted"> · {itemTotalLabel(container.parts)}</span>
+          )}
+        </h3>
+        <button className="link-btn" onClick={() => setAddingPart((v) => !v)}>
+          {addingPart ? 'Done' : '+ Add part'}
+        </button>
+      </div>
+
+      {addingPart && (
+        <form
+          className="card add-form"
+          onSubmit={(e) => { e.preventDefault(); if (npName.trim()) addPart.mutate() }}
+        >
+          <label className="field">
+            <span>Name</span>
+            <input value={npName} onChange={(e) => setNpName(e.target.value)} autoFocus required
+              placeholder="e.g. Arduino Nano" />
+          </label>
+          <label className="field">
+            <span>Category</span>
+            <input list="container-add-categories" value={npCategory}
+              onChange={(e) => setNpCategory(e.target.value)} placeholder="dev board" />
+            <datalist id="container-add-categories">
+              {SUGGESTED_CATEGORIES.map((c) => <option key={c} value={c} />)}
+            </datalist>
+          </label>
+          <CountField count={npCount} setCount={setNpCount} isMany={npMany} setIsMany={setNpMany} />
+          <button type="submit" disabled={!npName.trim() || addPart.isPending}>
+            {addPart.isPending ? 'Adding…' : 'Add part'}
+          </button>
+        </form>
+      )}
+
       <ul className="result-list">
         {container.parts?.map((p) => (
           <li key={p.id} className="card result tappable" onClick={() => setEditingPart(p)}>
             <div className="result-main">
               <span className="result-name">{p.name}</span>
               {p.category && <span className="chip">{p.category}</span>}
+              {countLabel(p) && <span className="chip chip-count">{countLabel(p)}</span>}
               <span className="edit-hint">Edit</span>
             </div>
             {p.tags?.length > 0 && (

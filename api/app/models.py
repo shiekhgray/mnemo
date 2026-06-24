@@ -1,5 +1,5 @@
 from sqlalchemy import (
-    ARRAY, CheckConstraint, Column, ForeignKey, Integer, JSON, String, Text,
+    ARRAY, Boolean, CheckConstraint, Column, ForeignKey, Integer, JSON, String, Text,
     UniqueConstraint,
 )
 from sqlalchemy.orm import relationship
@@ -137,5 +137,11 @@ class Part(Base):
     container_id = Column(Integer, ForeignKey("containers.id", ondelete="CASCADE"), nullable=False)
     tags = Column(ARRAY(String), nullable=False, default=list)
     notes = Column(Text)
+    # Optional quantity. Three states, since exact tracking is out of v1 scope but a
+    # rough sense of supply is useful: an exact `count`, OR `count_is_many` for "I have
+    # plenty, the number doesn't matter", OR neither set = unspecified. `count_is_many`
+    # wins and forces `count` NULL so the two can't contradict.
+    count = Column(Integer)
+    count_is_many = Column(Boolean, nullable=False, default=False, server_default="false")
 
     container = relationship("Container", back_populates="parts")

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import api from '../api/client'
 import { takeMeThereTo } from '../lib/takeMeThere'
+import { countLabel } from '../lib/count'
 
 function useDebounced(value, ms) {
   const [v, setV] = useState(value)
@@ -46,6 +47,7 @@ export default function SearchPage() {
               <div className="result-main">
                 <span className="result-name">{p.name}</span>
                 {p.category && <span className="chip">{p.category}</span>}
+                {countLabel(p) && <span className="chip chip-count">{countLabel(p)}</span>}
                 {p.is_container && <span className="chip chip-container">container</span>}
               </div>
               <div className="result-actions">

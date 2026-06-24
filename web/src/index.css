@@ -106,8 +106,14 @@ button.danger { background: var(--danger); color: #2a0d0d; }
   padding: 2px 8px; border-radius: 999px; white-space: nowrap;
 }
 .chip-container { background: transparent; color: var(--muted); border: 1px dashed var(--surface-2); }
+.chip-count { background: var(--accent); color: var(--bg); font-variant-numeric: tabular-nums; }
 .tags { display: flex; flex-wrap: wrap; gap: 6px; }
 .tag { background: var(--surface-2); color: var(--accent); font-size: 12px; padding: 2px 8px; border-radius: 999px; }
+
+.count-field { display: flex; align-items: center; gap: 12px; }
+.count-field input[type="number"] { flex: 1; min-width: 0; }
+.count-many { display: flex; align-items: center; gap: 6px; color: var(--muted); white-space: nowrap; }
+.count-many input { width: auto; }
 
 .header-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .header-row h2 { margin: 0; }
@@ -199,6 +205,12 @@ button.drawer-cell { cursor: pointer; }
   font-size: 11px; line-height: 1.2; overflow: hidden;
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
 }
+.drawer-types {
+  margin-top: auto; align-self: flex-start; font-size: 10px; white-space: nowrap;
+  color: var(--accent); background: var(--surface); border: 1px solid var(--accent);
+  border-radius: 999px; padding: 0 6px;
+}
+.drawer-cell.filled .drawer-types { background: var(--bg); }
 .drawer-cell.flash {
   border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent);
   animation: drawer-pulse 1s ease-in-out 3;

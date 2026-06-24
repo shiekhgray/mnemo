@@ -72,6 +72,26 @@ non-trivial logic is all about how a Container is *positioned*, and it lives in
 `api/app/positions.py` (location resolution, slot assignment, benching, the nesting cap). Routers
 should call those helpers rather than re-implementing position logic.
 
+**A `Part` carries an optional quantity** — three-state, not the full stock-tracking the PRD defers:
+an exact `count` (int), OR `count_is_many` ("plenty, the number doesn't matter"), OR neither
+(unspecified, the default). `count_is_many` wins and forces `count` NULL so they can't contradict;
+`routers/parts.parse_count()` resolves the pair from a request body and the frontend `lib/count.js`
+(`countLabel`/`countPayload`) handles display + form payload. Rendered as a `chip-count` next to the
+category chip.
+
+**A container holds *many* counted parts.** `Container.parts` is one-to-many — a "dev board box" can
+list `Arduino Nano ×5`, `Arduino Micro ×3`, `NeoPixel Jewel ×4` as distinct parts. The June 2026
+drawer migration's part-name == container-label convention makes single-drawer cabinets *look*
+one-to-one, but that's a convention, not a constraint. `ContainerPage.jsx` has an inline **"+ Add
+part"** form (name + category + count) that stays open after each add for rapid entry — the place to
+enumerate a box's contents without leaving for the Add tab. The per-part counts, the `Parts (N)`
+distinct-type total, *and* a summed **item total** (`lib/count.itemTotalLabel` — e.g. `· 12 items`,
+or `8+ items` when a "many" part is mixed in) all show there when you tap into a drawer; the
+**Locations grid** stays
+summarized — each slot dict carries `occupant_part_count` (`routers/bins._slot_dict`) and a drawer
+cell badges **"N types"** (`LocationsPage.TypesBadge`) only when it holds 2+ distinct parts, so a
+dev-board box reads at a glance without dumping its 15 lines onto the grid.
+
 **Container is the stable unit of tracking — not its position.** Move a container, update one
 record, and everything inside follows. A Container's position is **at most one of**:
 `slot_id` / `parent_container_id` / `freeform_location`; **none set = "benched."** This invariant is
