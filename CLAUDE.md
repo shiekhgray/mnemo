@@ -104,9 +104,22 @@ tags — the primary use case. Category is a **free string** (suggestions offere
 `location_ref()` (also in `positions.py`) is its structured twin: `{kind: wall|chest|nested|
 freeform|benched, ...}` carried on search results and container serializers so the frontend can
 navigate without parsing the display string. The **Locations page** (`web/src/pages/LocationsPage.jsx`,
-route `/locations`) is the read-only visual finder built on it — a Wall tab (cabinet overview →
-detail + minimap, rendered straight from `GET /bins`) plus stubbed Tackle/Printer tabs; search
-results get a "take me there" action that teleports via `?tab=&bin=&address=` and flashes the drawer.
+route `/locations`) is the visual finder built on it — a Wall tab (cabinet overview →
+detail + minimap, rendered straight from `GET /bins`), a Tackle tab (drawer chests from
+`GET /chests`), and a stubbed Printer tab; search results get a "take me there" action that
+teleports via `?tab=&bin=&address=` and flashes the drawer.
+
+**Storage layout editor** (`prd/layout-editor.prd`) — the finder defaults to read-only, but Wall and
+Tackle each have an **"Edit layout"** toggle for *fixture* CRUD (Bins/Chests/Slots — containers stay
+read-only here, that's drag-reorg). Cabinets: `CabinetEditModal.jsx` (preset or custom band grid +
+wall-cell placement); Chests: `ChestEditModal.jsx` (label + drawer count). Backend is `routers/bins.py`
+CRUD calling `positions.py` helpers; a cabinet's geometry is a **band list** (`bins.grid_spec` JSON,
+`[{cols,rows},…]`) — `addresses_for_grid()` walks bands top→bottom (continuous row #s, per-row column
+letters). Reshaping/shrinking **benches displaced occupants, never deletes** (`reconcile_bin/chest_slots`
+returns `{added,removed,bumped}` for the UI's blast-radius confirm); the frontend recomputes that
+client-side from the same band→address scheme for a confirm-*before*-apply. Row heights render from the
+band model (`LocationsPage.rowWeights`: each band an equal vertical slice, split evenly among its rows —
+reproduces the three Akro-Mils presets and any custom grid). Presets come from `GET /presets`.
 
 **The real wall** is one wall, 3 cols × 4 rows of 12 Akro-Mils units numbered **Cabinet 1–12** in
 reading order, encoded in `seed_storage.py`'s `WALL_LAYOUT`. The photo-derived layout/geometry lives
