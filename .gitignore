@@ -9,3 +9,4 @@ node_modules/
 # These describe Graham's particular wall and aren't useful to others.
 wall_photos/
 docs/WALL.md
+bulkimport.py
