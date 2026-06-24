@@ -152,3 +152,8 @@ personal data). Per-drawer positions are only parsed for Cabinet 1 so far; every
   `web/src/api/client.js` does a **single-flight** refresh on 401 and only wipes the session when
   `/auth/refresh` itself returns 401 — a transient network/5xx failure leaves tokens intact so a
   flaky connection doesn't surprise-log-out a still-valid session.
+- **localStorage keys are `mnemo_`-prefixed** (`mnemo_access_token` / `mnemo_refresh_token` /
+  `mnemo_username`). mnemo and calliope are both served from `dresdengray.com`, and **localStorage is
+  scoped to origin, not path** — so the two apps share one bucket. Bare key names (which calliope
+  still uses) would collide and log you out of one app when you sign into the other. Keep any new
+  persisted state namespaced (e.g. `mnemo.bench.expanded`).
