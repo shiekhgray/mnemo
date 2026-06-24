@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import api from '../api/client'
 
 const TABS = [
@@ -34,13 +34,23 @@ function binRows(bin) {
     }))
 }
 
-// A miniature, non-interactive sketch of one cabinet's drawer grid.
+// Physical height of a drawer row as a fraction of the unit. Every Akro-Mils unit
+// is the same outer size, but a narrow grid stacks 8 rows and a wide grid 6, so a
+// narrow row is shorter than a wide one. half-half cabinets put 4 narrow rows over
+// 3 wide ones (top half / bottom half). Narrow rows have 8 cols, wide rows 4 — we
+// key off that. Used as a flex-grow weight so rows divide the fixed cabinet box.
+function rowFlex(cells) {
+  return cells.length > 4 ? 1 / 8 : 1 / 6
+}
+
+// A miniature, non-interactive sketch of one cabinet's drawer grid. Renders into a
+// fixed-aspect box (CSS) so every unit reads as the same physical size.
 function MiniCabinet({ bin }) {
   const rows = useMemo(() => binRows(bin), [bin])
   return (
     <div className="mini-cabinet">
       {rows.map((r) => (
-        <div key={r.row} className="mini-row">
+        <div key={r.row} className="mini-row" style={{ flex: rowFlex(r.cells) }}>
           {r.cells.map((c) => (
             <span
               key={c.id}
@@ -77,29 +87,29 @@ function WallGrid({ bins, selectedId, onSelect, variant }) {
   )
 }
 
-// One cabinet, full size: every drawer as a labelled cell. Occupied drawers link
-// to their container; the teleport target (flashAddress) is highlighted.
-function CabinetDetail({ bin, flashAddress }) {
+// One cabinet, full size: every drawer is a tappable cell. Occupied drawers open
+// their container's edit page; empty ones create a container in that slot and open
+// it ready to name. The teleport target (flashAddress) is highlighted.
+function CabinetDetail({ bin, flashAddress, onOpenDrawer, busy }) {
   const rows = useMemo(() => binRows(bin), [bin])
   return (
     <div className="cabinet-detail">
       {rows.map((r) => (
-        <div key={r.row} className="drawer-row">
+        <div key={r.row} className="drawer-row" style={{ flex: rowFlex(r.cells) }}>
           {r.cells.map((c) => {
             const flashed = flashAddress && c.address === flashAddress
             const cls = `drawer-cell${c.occupant_id ? ' filled' : ''}${flashed ? ' flash' : ''}`
-            const inner = (
-              <>
+            return (
+              <button
+                key={c.id}
+                type="button"
+                className={cls}
+                disabled={busy}
+                onClick={() => onOpenDrawer(c)}
+              >
                 <span className="drawer-addr">{c.address}</span>
                 <span className="drawer-label">{c.occupant_label || ''}</span>
-              </>
-            )
-            return c.occupant_id ? (
-              <Link key={c.id} to={`/containers/${c.occupant_id}`} className={cls}>
-                {inner}
-              </Link>
-            ) : (
-              <div key={c.id} className={cls}>{inner}</div>
+              </button>
             )
           })}
         </div>
@@ -109,10 +119,29 @@ function CabinetDetail({ bin, flashAddress }) {
 }
 
 function WallTab({ selectedId, setSelectedId, flashAddress, setFlashAddress }) {
+  const qc = useQueryClient()
+  const navigate = useNavigate()
   const { data: bins = [], isLoading } = useQuery({
     queryKey: ['bins'],
     queryFn: async () => (await api.get('/bins')).data,
   })
+
+  // Tapping an empty drawer creates a container in that slot, then opens it in
+  // rename mode; an occupied drawer just opens its container. Either way you land
+  // on the container's edit page.
+  const create = useMutation({
+    mutationFn: (cell) =>
+      api.post('/containers', { label: cell.label, type: 'other', slot_id: cell.id }),
+    onSuccess: ({ data }) => {
+      qc.invalidateQueries({ queryKey: ['bins'] })
+      navigate(`/containers/${data.id}`, { state: { rename: true } })
+    },
+  })
+
+  const openDrawer = (cell) => {
+    if (cell.occupant_id) navigate(`/containers/${cell.occupant_id}`)
+    else if (!create.isPending) create.mutate(cell)
+  }
 
   if (isLoading) return <p className="muted">Loading wall…</p>
   if (bins.length === 0) return <p className="muted">No wall bins seeded yet.</p>
@@ -141,7 +170,12 @@ function WallTab({ selectedId, setSelectedId, flashAddress, setFlashAddress }) {
         <strong>{binName(selected)}</strong>
         <WallGrid bins={bins} selectedId={selectedId} onSelect={selectBin} variant="minimap" />
       </div>
-      <CabinetDetail bin={selected} flashAddress={flashAddress} />
+      <CabinetDetail
+        bin={selected}
+        flashAddress={flashAddress}
+        onOpenDrawer={openDrawer}
+        busy={create.isPending}
+      />
     </div>
   )
 }

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import api from '../api/client'
 import { CONTAINER_TYPES } from '../constants'
@@ -10,6 +10,7 @@ export default function ContainerPage() {
   const { id } = useParams()
   const qc = useQueryClient()
   const navigate = useNavigate()
+  const location = useLocation()
 
   const { data: container } = useQuery({
     queryKey: ['container', id],
@@ -22,7 +23,9 @@ export default function ContainerPage() {
 
   const [slotId, setSlotId] = useState('')
   const [freeform, setFreeform] = useState('')
-  const [editing, setEditing] = useState(false)
+  // Arriving from an empty-drawer tap on the wall opens the rename form right away
+  // (the input starts blank so you can just type the new name).
+  const [editing, setEditing] = useState(Boolean(location.state?.rename))
   const [editLabel, setEditLabel] = useState('')
   const [editType, setEditType] = useState('other')
   const [confirmingDelete, setConfirmingDelete] = useState(false)
@@ -76,7 +79,8 @@ export default function ContainerPage() {
         <div className="card">
           <label className="field">
             <span>Label</span>
-            <input value={editLabel} onChange={(e) => setEditLabel(e.target.value)} autoFocus />
+            <input value={editLabel} onChange={(e) => setEditLabel(e.target.value)}
+              autoFocus onFocus={(e) => e.target.select()} />
           </label>
           <label className="field">
             <span>Type</span>

@@ -163,25 +163,29 @@ button.danger { background: var(--danger); color: #2a0d0d; }
 .wall-grid.minimap .wall-cabinet { padding: 3px; gap: 2px; }
 .wall-grid.minimap .wall-cabinet-name { font-size: 8px; }
 
-/* Miniature drawer sketch inside a cabinet button */
-.mini-cabinet { display: flex; flex-direction: column; gap: 1px; }
-.mini-row { display: flex; gap: 1px; justify-content: center; }
-.mini-cell { flex: 1; aspect-ratio: 1; background: var(--surface-2); border-radius: 1px; max-width: 8px; }
+/* Miniature drawer sketch inside a cabinet button. The box is a fixed aspect ratio
+   (all units are the same physical size); rows share its height by drawer type. */
+.mini-cabinet { display: flex; flex-direction: column; gap: 1px; aspect-ratio: 3 / 2; }
+.mini-row { display: flex; gap: 1px; min-height: 0; }
+.mini-cell { flex: 1; min-width: 0; background: var(--surface-2); border-radius: 1px; }
 .mini-cell.filled { background: var(--accent); opacity: 0.8; }
-.wall-grid.minimap .mini-cell { max-width: 4px; }
 
 /* Cabinet detail: back link + name + minimap strip above the drawer grid */
 .detail-bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .detail-bar .link-btn { padding: 6px 0; }
 .detail-bar strong { flex: 1; }
 
-.cabinet-detail { display: flex; flex-direction: column; gap: 4px; }
-.drawer-row { display: flex; gap: 4px; }
+/* Fixed-aspect cabinet box (same physical size for every unit); rows share its
+   height weighted by drawer type, so narrow grids get short rows, wide grids tall. */
+.cabinet-detail { display: flex; flex-direction: column; gap: 4px; aspect-ratio: 3 / 2; }
+.drawer-row { display: flex; gap: 4px; min-height: 0; }
 .drawer-cell {
-  flex: 1; min-width: 0; min-height: 48px; background: var(--surface);
+  flex: 1; min-width: 0; min-height: 0; overflow: hidden; background: var(--surface);
   border: 1px solid var(--surface-2); border-radius: 6px; padding: 4px;
   display: flex; flex-direction: column; gap: 2px; text-decoration: none; color: var(--text);
+  font: inherit; font-weight: 400; text-align: left;
 }
+button.drawer-cell { cursor: pointer; }
 .drawer-cell.filled { background: var(--surface-2); }
 .drawer-addr { font-size: 10px; color: var(--muted); }
 .drawer-label {
