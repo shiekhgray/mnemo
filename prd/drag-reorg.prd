@@ -1,0 +1,221 @@
+# Drag to Reorganize — Feature Definition
+
+> Feature addendum to `mnemo.prd` (core product + position model) and
+> `locations.prd` (the visual finder this builds on). Read those first.
+
+## Problem
+
+Today the Locations page is **read-only** (an explicit non-goal in `locations.prd`:
+"no drag-and-drop reorganization"). To move a container you leave the spatial view,
+open the container's edit page, and re-assign a slot by code/address — exactly the
+abstract, code-decoding chore the finder was built to kill. The wall is rendered as it
+physically looks, the user is standing in front of it on a phone, and yet the one thing
+they can't do is *rearrange it by touch the way they'd move a real drawer*.
+
+Reorganizing is a real, frequent action: you free up a drawer, consolidate two
+half-full ones, or pull a container off the wall to take to the bench. Each of those is
+a position change the data model already supports — it just has no spatial gesture.
+
+## Goal
+
+From the Wall tab, let the user reorganize by **dragging a drawer**:
+
+- **Drag onto another drawer in the same cabinet → swap.** The two containers exchange
+  slots in place. Drag onto an **empty** drawer and it simply moves there.
+- **Drag onto the bench → bench.** The container leaves the wall (position cleared) and
+  lands in the **bench**, a globally-available list of un-placed containers.
+- **The bench is the bridge for everything else.** You can only see one cabinet's drawers
+  at a time, so moving a container to a *different* cabinet goes through the bench: drag
+  it off, switch cabinets, drag it back out of the bench onto a drawer. To make that
+  workable, the bench is reachable from **every page** as a collapsible sidebar.
+
+One gesture, done in front of the physical wall, with the on-screen layout updating to
+match what you just did with your hands. This lifts the read-only restriction for
+**container positions only** — it does not touch fixtures (that's `layout-editor.prd`).
+
+## Non-Goals (this iteration)
+
+- **Editing fixtures by drag.** Cabinets, chests, slots, and wall placement are not
+  draggable here — that's `layout-editor.prd`. This feature moves *containers between
+  existing slots*, nothing else.
+- **The Part/Container/nesting model.** Containers, parts, the 2-level nesting cap, and
+  the position invariant are unchanged. A drag resolves to exactly the existing
+  `assign-slot` / `bench` operations (plus one new *swap*); no new position types.
+- **Tackle / Printer tabs.** Drag lives on the **Wall** tab first, the only built-out
+  tab. The same gestures can extend to the others when they're built (see Open Q).
+- **Drag-to-nest.** Dropping a container *into* another to nest it is a separate idea;
+  this round is slot↔slot swap and slot→bench only.
+- **Multi-select / bulk move.** One container per drag.
+
+## Core interaction
+
+The Wall tab's `CabinetDetail` already renders each drawer as a button cell showing its
+address and occupant label. This feature makes an **occupied** cell draggable and makes
+cells (and a bench target) valid **drop zones**.
+
+Drag sources and drop outcomes:
+
+| Drag from | Drop on | Outcome |
+| --- | --- | --- |
+| occupied drawer | **empty** drawer | move: source container → target slot |
+| occupied drawer | **occupied** drawer (same cabinet) | **swap**: the two containers exchange slots |
+| occupied drawer | **bench** (sidebar / drop zone) | bench: source container's position cleared |
+| **bench chip** | empty drawer | place: benched container → target slot |
+| **bench chip** | occupied drawer | swap: benched container ⇄ that drawer's occupant |
+| empty drawer | anything | not draggable (nothing to move) |
+
+- **Tap is preserved.** A short tap still does what it does today (open the occupant's
+  container, or create-and-name in an empty drawer). Only a *drag* gesture reorganizes.
+  Distinguishing tap from drag-start is the central interaction detail (see UX).
+- **Drop is confirmed implicitly by release**, not a modal — a fast, direct-manipulation
+  feel. A *swap* moves two containers at once, so the post-drop toast names both ("Swapped
+  *Resistors 10k* ⇄ *Capacitors*") to make an accidental swap obvious and undoable.
+
+### Swap vs. bump — the one non-obvious rule
+
+The existing `assign_slot()` is **not** a swap: assigning A to an occupied slot *bumps*
+the occupant B to **benched** (the documented unique-slot rule). That's correct for the
+container edit flow, but it's the **wrong** outcome for a drag-onto-occupied gesture,
+where the user's mental model is "trade places" — bumping B silently off the wall is a
+surprise. So drag-onto-occupied needs **true swap** semantics: A takes B's slot *and* B
+takes A's slot, atomically, neither benched. This is a new operation, not the existing
+assign (see API).
+
+Drag-onto-**empty** is an ordinary move and can reuse `assign_slot()` as-is (no occupant
+to bump).
+
+## The bench sidebar — bridge for cross-cabinet moves
+
+Only one cabinet's drawers are on screen at a time (the detail view), so a *direct* drag
+from cabinet 3 to cabinet 7 isn't expressible — you can't drop on a drawer you can't see.
+**The bench is the required intermediary:** drag off the wall to bench, switch cabinets
+via the minimap, then drag the container back out of the bench onto a drawer. So the bench
+must be both a **drop target** (to bench) and a **drag source** (to place), and it must be
+visible while you navigate between cabinets.
+
+The bench therefore lives as a **collapsible sidebar available on every page**, not just a
+Wall-tab tray:
+
+- It renders in **`web/src/components/Layout.jsx`**, which already wraps every authenticated
+  route, so it's present on the Locations page *and* on each container page — satisfying
+  "view the bench from every container page."
+- **Orientation is reactive to the viewport's aspect ratio:** wider-than-tall (landscape /
+  desktop) → a **left edge drawer**; taller-than-wide (portrait phone) → a **bottom sheet**.
+  It's the same component and behavior; only the docking edge and slide axis swap, chosen
+  from a CSS aspect-ratio / matchMedia breakpoint so it re-docks live on rotation. This puts
+  the handle on whichever edge has the room and lands the chips along the screen's long axis.
+- **Defaults collapsed** to a thin edge tab/handle so it never crowds the phone layout;
+  tapping the handle (or starting a drag) expands it. State (collapsed/expanded) persists
+  across navigation.
+- Its contents are the existing **`GET /containers/benched`** list under the existing
+  **`['benched']`** query key — no new read. Each benched container is a **chip** that is a
+  drag source: drag a chip onto an empty drawer to place it, or onto an occupied drawer to
+  swap. A chip also links to that container's page (tap, as today).
+- It **replaces the standalone `/benched` page**, which is retired: drop the route and the
+  `BenchedPage` import in `App.jsx`, remove the "Benched" `NavLink` in `Layout.jsx`, and
+  redirect any lingering `/benched` link to where the bench now lives (the sidebar). The
+  sidebar is now the one place to see and act on benched containers.
+
+Because the sidebar is global, "switch cabinets and place from the bench" works without any
+Wall-tab-specific tray, and the same bench is the staging area for the container-edit flow
+that already exists.
+
+## UX / UX details (mobile-first is the hard part)
+
+mnemo is phone-first, and **HTML5 drag-and-drop does not work on touch.** This is the
+defining implementation constraint, not a footnote:
+
+- Use a **pointer-events based** drag (Pointer Events API, or a touch-capable DnD lib)
+  so it works identically with finger and mouse. Don't reach for native `draggable`.
+- **Long-press to lift (decided).** A drag starts only after a **press-and-hold** on an
+  occupied drawer; a plain tap still opens the drawer and a plain drag still scrolls the
+  page. The press-and-hold is the unambiguous "now you're moving it" signal on touch
+  (worth a subtle lift animation / haptic-style cue at the threshold).
+- **Live feedback:** the lifted drawer follows the finger (or a ghost does); valid drop
+  targets highlight; the hovered target shows what will happen (a *swap* badge over an
+  occupied drawer, a *move* outline over an empty one). Reuse the existing `flash`
+  highlight vocabulary where possible.
+- **Scroll vs. drag:** a cabinet can be taller than the viewport; the drag must not fight
+  page scroll. Long-press-to-lift resolves this — a plain drag scrolls, a held drag moves.
+- **Bench as drop target:** the collapsed bench handle/edge acts as the drop zone. Lifting
+  a drawer can auto-reveal (peek-open) the bench sidebar so the target is obviously there,
+  then re-collapse on release.
+- **Optimistic update + rollback.** Reflect the move immediately (TanStack Query optimistic
+  update on `['bins']`), then reconcile with the server; on failure, snap back and toast.
+- **Undo.** Because a drop is committed on release with no confirm, a brief **Undo** on the
+  success toast is the safety net — especially for swaps. (Undo = the inverse op: swap back,
+  or re-assign the benched container to its prior slot.)
+
+The read-only finder stays the default; dragging is just what a press-and-hold on an
+occupied drawer now affords. No separate "edit mode" toggle is needed for container moves
+(unlike the fixture editor, which does gate behind a mode).
+
+## API Requirements
+
+The two simple outcomes already exist and are reused unchanged:
+
+- **Move to empty slot** → `POST /containers/{id}/assign-slot` (`assign_slot()`; no
+  occupant, so no bump).
+- **Bench** → `POST /containers/{id}/bench`.
+
+The **swap** needs a new, transactional operation, because doing it as two client-side
+assigns would (a) bump one occupant to benched between the calls and (b) be non-atomic.
+Conceptually:
+
+- **`POST /containers/{id}/swap-slot`** with `{ slot_id }` (the *target* slot, currently
+  occupied by B): in one transaction, give A the target slot and give B the source slot,
+  benching neither. Lives next to `assign_slot()` in `positions.py` — it owns the unique
+  slot bump and benching, and this is a sibling rule. The unique `containers.slot_id`
+  constraint means the swap must stage through a `flush()` (e.g. clear both, flush, then
+  set both) exactly as `assign_slot()` does to avoid tripping uniqueness mid-swap.
+  - **Validate** that the source container actually holds the source slot the client
+    thinks it does (guard against a stale `['bins']` cache reordering under the user).
+
+Reads still come from `GET /bins` unchanged — a drag just re-fetches/optimistically edits
+it. **No migration** is needed; this is pure position movement over the existing schema.
+
+## Edge cases / safety
+
+- **Stale position (the expected case from `mnemo.prd`).** Two containers may already share
+  a last-known slot from an un-logged move — an *acceptable* state, not an error. A drag
+  onto such a slot should still resolve sensibly (treat as occupied → swap with the chosen
+  occupant); don't crash on the double-occupancy the model permits.
+- **Drop on self / drop on same slot** → no-op, no server call.
+- **Drag a benched chip onto its own (now empty) origin** → ordinary assign.
+- **Concurrent edit** → the swap endpoint's source-slot validation rejects a move computed
+  against a stale board; the client re-fetches and the user re-tries.
+
+## Build Phasing
+
+1. **Bench sidebar (read-only).** The collapsible, every-page bench in `Layout.jsx`,
+   defaulting collapsed, rendering the existing `['benched']` list as chips. Useful on its
+   own (the bench is finally visible everywhere) and the foundation for the drag target.
+2. **Drag-to-bench, single cabinet.** Long-press lift on an occupied drawer → drop on the
+   bench sidebar, optimistic update + undo toast. Reuses `POST .../bench`. Smallest slice
+   that pulls a drawer off the wall.
+3. **Drag-to-move / swap within a cabinet.** Drop on empty (reuse `assign-slot`) and drop
+   on occupied (new **`swap-slot`** endpoint), with the swap toast + undo.
+4. **Bench chips as a drag source.** Drag a benched chip onto a drawer to place/swap,
+   completing the cross-cabinet flow (bench → switch cabinet → place).
+
+### Decided
+
+- **Swap is a real, new operation** — drag-onto-occupied **swaps** (neither benched), via a
+  new transactional `POST /containers/{id}/swap-slot`; the existing bump-to-benched assign
+  is *not* reused for occupied targets.
+- **Long-press to lift** is the drag-start gesture (tap opens, plain drag scrolls).
+- **The bench is the required intermediary** for cross-cabinet moves, surfaced as a
+  **collapsible, every-page sidebar** (defaults collapsed) in `Layout.jsx`, whose dock is
+  **reactive**: left edge when the viewport is wider than tall, bottom sheet when taller
+  than wide.
+- **The `/benched` page is retired** and replaced by the sidebar.
+
+## Open Questions
+
+- **Undo lifetime** — toast-duration undo only, or a small persistent "undo last move"?
+  Swaps especially want a forgiving window.
+- **Extending to Tackle/Printer tabs** — the same swap/bench gestures generalize, but those
+  tabs aren't built yet (`locations.prd`). Defer until they exist, or design the drag layer
+  tab-agnostically now so it drops in for free?
+</content>
+</invoke>
