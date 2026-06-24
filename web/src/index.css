@@ -145,7 +145,13 @@ button.danger { background: var(--danger); color: #2a0d0d; }
 .seg-tab.active { background: var(--surface-2); color: var(--text); }
 
 .locations-body { display: flex; flex-direction: column; gap: 12px; }
-.stub-card { align-items: center; text-align: center; }
+
+/* Standalone storage systems (Storage tab) — an auto-flowing grid of cabinet cards,
+   reusing .wall-cabinet/.mini-cabinet but without the wall's fixed 2D placement. */
+.storage-list {
+  display: grid; gap: 6px;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+}
 
 /* The 3x4 wall of cabinets — overview (large) and minimap (small) variants */
 .wall-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }

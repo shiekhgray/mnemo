@@ -9,7 +9,7 @@ import ChestEditModal from '../components/ChestEditModal'
 const TABS = [
   { key: 'wall', label: 'Wall' },
   { key: 'tackle', label: 'Tackle' },
-  { key: 'printer', label: 'Printer' },
+  { key: 'storage', label: 'Storage' },
 ]
 
 // A bin's drawer name to show in the UI: human label when present, else the code.
@@ -254,10 +254,13 @@ function WallTab({ selectedId, setSelectedId, flashAddress, setFlashAddress }) {
   const navigate = useNavigate()
   const [editMode, setEditMode] = useState(false)
   const [editing, setEditing] = useState(null) // { mode, bin?, cell? } for the modal
-  const { data: bins = [], isLoading } = useQuery({
+  const { data: allBins = [], isLoading } = useQuery({
     queryKey: ['bins'],
     queryFn: async () => (await api.get('/bins')).data,
   })
+  // The Wall tab shows only wall-placed cabinets; off-wall bins are standalone
+  // storage systems and live in the Storage tab.
+  const bins = allBins.filter((b) => b.wall_row != null)
 
   // Tapping an empty drawer creates a container in that slot, then opens it in
   // rename mode; an occupied drawer just opens its container. Either way you land
@@ -493,13 +496,142 @@ function TackleTab() {
   )
 }
 
-function StubTab({ name }) {
+// The browse/edit list of standalone storage systems — each an off-wall grid fixture
+// drawn as a tappable MiniCabinet. Mirrors the wall overview, minus 2D placement.
+function StorageOverview({ bins, editMode, onSelect, onEdit, onAdd }) {
+  return (
+    <div className="storage-list">
+      {bins.map((bin) => (
+        <button
+          key={bin.id}
+          className="wall-cabinet"
+          onClick={() => (editMode ? onEdit(bin) : onSelect(bin.id))}
+        >
+          <span className="wall-cabinet-name">
+            {binName(bin)}
+            {editMode ? ' ✎' : ''}
+          </span>
+          <MiniCabinet bin={bin} />
+        </button>
+      ))}
+      {editMode && (
+        <button className="wall-cabinet add-cell" onClick={onAdd}>
+          + Add
+        </button>
+      )}
+    </div>
+  )
+}
+
+// The Storage tab: free-form grid fixtures that aren't on the wall (a printer chest,
+// a shelf, …). Structurally identical to a wall cabinet — same Bin grid model, same
+// CabinetDetail renderer and CabinetEditModal (in `standalone` mode) — just without a
+// wall position. The '+' here is the generic "add a storage system" affordance that
+// replaced the old Printer stub.
+function StorageTab({ selectedId, setSelectedId, flashAddress, setFlashAddress }) {
+  const qc = useQueryClient()
+  const navigate = useNavigate()
+  const [editMode, setEditMode] = useState(false)
+  const [editing, setEditing] = useState(null) // { mode, bin? } for the modal
+  const { data: allBins = [], isLoading } = useQuery({
+    queryKey: ['bins'],
+    queryFn: async () => (await api.get('/bins')).data,
+  })
+  const bins = allBins.filter((b) => b.wall_row == null)
+
+  const create = useMutation({
+    mutationFn: (cell) =>
+      api.post('/containers', { label: cell.label, type: 'other', slot_id: cell.id }),
+    onSuccess: ({ data }) => {
+      qc.invalidateQueries({ queryKey: ['bins'] })
+      navigate(`/containers/${data.id}`, { state: { rename: true } })
+    },
+  })
+
+  const openDrawer = (cell) => {
+    if (cell.occupant_id) navigate(`/containers/${cell.occupant_id}`)
+    else if (!create.isPending) create.mutate(cell)
+  }
+
+  const onSaved = () => {
+    qc.invalidateQueries({ queryKey: ['bins'] })
+    setEditing(null)
+  }
+
+  const selectBin = (id) => {
+    setFlashAddress(null)
+    setSelectedId(id)
+  }
+
+  // Entering edit-layout mode forces the overview (edits act on the whole list).
+  const toggleEdit = () => {
+    setFlashAddress(null)
+    setSelectedId(null)
+    setEditMode((v) => !v)
+  }
+
+  const editModal = editing && (
+    <CabinetEditModal
+      mode={editing.mode}
+      bin={editing.bin}
+      bins={allBins}
+      standalone
+      onClose={() => setEditing(null)}
+      onSaved={onSaved}
+    />
+  )
+
+  if (isLoading) return <p className="muted">Loading storage…</p>
+
+  const selected = bins.find((b) => b.id === selectedId)
+
+  if (bins.length === 0 && !editMode) {
+    return (
+      <div className="locations-body">
+        <p className="muted">No storage systems yet.</p>
+        <button className="link-btn" onClick={() => setEditing({ mode: 'create' })}>
+          + Add your first storage system
+        </button>
+        {editModal}
+      </div>
+    )
+  }
+
+  if (selected) {
+    return (
+      <div className="locations-body">
+        <div className="detail-bar">
+          <button className="link-btn" onClick={() => selectBin(null)}>← Storage</button>
+          <strong>{binName(selected)}</strong>
+        </div>
+        <CabinetDetail
+          bin={selected}
+          flashAddress={flashAddress}
+          onOpenDrawer={openDrawer}
+          busy={create.isPending}
+        />
+      </div>
+    )
+  }
+
   return (
     <div className="locations-body">
-      <div className="card stub-card">
-        <h3>{name}</h3>
-        <p className="muted">Coming soon — this tab isn’t built out yet.</p>
+      <div className="edit-bar">
+        <span className="hint">
+          {editMode ? 'Tap a system to edit, or add one.' : 'Tap a system to see its drawers.'}
+        </span>
+        <button className="link-btn" onClick={toggleEdit}>
+          {editMode ? 'Done' : 'Edit layout'}
+        </button>
       </div>
+      <StorageOverview
+        bins={bins}
+        editMode={editMode}
+        onSelect={selectBin}
+        onEdit={(bin) => setEditing({ mode: 'edit', bin })}
+        onAdd={() => setEditing({ mode: 'create' })}
+      />
+      {editModal}
     </div>
   )
 }
@@ -551,7 +683,14 @@ export default function LocationsPage() {
         />
       )}
       {tab === 'tackle' && <TackleTab />}
-      {tab === 'printer' && <StubTab name="Printer drawers" />}
+      {tab === 'storage' && (
+        <StorageTab
+          selectedId={selectedId}
+          setSelectedId={setSelectedId}
+          flashAddress={flashAddress}
+          setFlashAddress={setFlashAddress}
+        />
+      )}
     </div>
   )
 }

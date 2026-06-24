@@ -138,6 +138,20 @@ adds or bumps-and-removes drawers under the same re-homing rule); delete with th
 occupant-bumping guard. The printer-style nested chest (`locations.prd`) needs no
 slots and is out of scope here — it's modeled with nesting, not fixtures.
 
+## Standalone storage systems (Storage tab)
+
+A wall cabinet and any other grid fixture (a printer chest, a shelf, a parts organizer)
+are **the same model**: a `Bin` with a band-grid of slots. The only difference is a wall
+cabinet has a `wall_row`/`wall_col` and an off-wall fixture doesn't. So a generic
+**"storage system"** is just a `Bin` with no wall position, surfaced in a **Storage tab**
+(which replaced the old stubbed Printer tab). It reuses the cabinet grid renderer
+(`CabinetDetail`) and `CabinetEditModal` (a `standalone` prop hides the wall-cell picker),
+and the same band-grid CRUD / bump-don't-delete reconcile. The Storage tab's **"+ Add
+storage system"** is the generic, layout-agnostic way to add new fixtures — each holds
+containers, which nest up to 2 levels, which hold parts (the universal shape). Folding
+`Chest` into this same `Bin` model is a possible later migration; for now chests keep
+their own table and the Tackle tab.
+
 ## UI / UX
 
 A **Manage / edit-layout mode** on the Locations page (an "Edit layout" toggle on the

@@ -117,6 +117,9 @@ def location_ref(container: models.Container) -> dict:
                 "bin_code": slot.bin.code,
                 "bin_label": slot.bin.label,
                 "address": slot.address,
+                # Placed on the 3x4 wall vs a standalone grid fixture — lets the
+                # frontend route "take me there" to the Wall vs Storage tab.
+                "placed": slot.bin.wall_row is not None,
             }
         if slot.kind == "chest" and slot.chest is not None:
             return {

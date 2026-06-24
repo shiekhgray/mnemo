@@ -82,11 +82,14 @@ function WallCellPicker({ bins, selfId, value, onPick }) {
   )
 }
 
-// Create or edit a wall cabinet. `mode` is 'create' (placed at `cell`) or 'edit'
-// (acting on `bin`). On any successful change, onSaved() is called so the parent can
-// invalidate ['bins'] and close.
-export default function CabinetEditModal({ mode, bin, cell, bins, onClose, onSaved }) {
+// Create or edit a grid fixture. `mode` is 'create' (placed at `cell`) or 'edit'
+// (acting on `bin`). With `standalone`, the fixture lives off the wall (a "storage
+// system" — same Bin grid model, just no wall position), so the wall-cell picker is
+// hidden and saving doesn't require a position. On any successful change, onSaved()
+// is called so the parent can invalidate ['bins'] and close.
+export default function CabinetEditModal({ mode, bin, cell, bins, standalone = false, onClose, onSaved }) {
   const isEdit = mode === 'edit'
+  const noun = standalone ? 'storage system' : 'cabinet'
   const { data: presets = [] } = useQuery({
     queryKey: ['presets'],
     queryFn: async () => (await api.get('/presets')).data,
@@ -207,14 +210,14 @@ export default function CabinetEditModal({ mode, bin, cell, bins, onClose, onSav
   return (
     <div className="modal-backdrop" onMouseDown={onClose}>
       <div className="modal card" onMouseDown={(e) => e.stopPropagation()}>
-        <h3>{isEdit ? 'Edit cabinet' : 'Add cabinet'}</h3>
+        <h3>{isEdit ? `Edit ${noun}` : `Add ${noun}`}</h3>
         <form onSubmit={onSubmit}>
           <label className="field">
             <span>Name</span>
             <input
               value={label}
               onChange={(e) => setLabel(e.target.value)}
-              placeholder="e.g. Cabinet 13"
+              placeholder={standalone ? 'e.g. Printer chest' : 'e.g. Cabinet 13'}
               autoFocus
             />
           </label>
@@ -291,17 +294,19 @@ export default function CabinetEditModal({ mode, bin, cell, bins, onClose, onSav
             )}
           </div>
 
-          <div className="field">
-            <span>Wall position {isEdit && <em className="muted">(tap to move)</em>}</span>
-            <WallCellPicker bins={bins} selfId={bin?.id} value={pos} onPick={setPos} />
-          </div>
+          {!standalone && (
+            <div className="field">
+              <span>Wall position {isEdit && <em className="muted">(tap to move)</em>}</span>
+              <WallCellPicker bins={bins} selfId={bin?.id} value={pos} onPick={setPos} />
+            </div>
+          )}
 
           {error && <p className="error">{error}</p>}
           <div className="modal-actions">
             <button type="button" className="btn-secondary" onClick={onClose} disabled={saving}>
               Cancel
             </button>
-            <button type="submit" disabled={saving || !pos}>
+            <button type="submit" disabled={saving || (!standalone && !pos)}>
               {saving ? 'Saving…' : isEdit ? 'Save' : 'Create'}
             </button>
           </div>
@@ -316,7 +321,7 @@ export default function CabinetEditModal({ mode, bin, cell, bins, onClose, onSav
               setConfirmingDelete(true)
             }}
           >
-            Delete cabinet
+            Delete {noun}
           </button>
         )}
       </div>
@@ -334,13 +339,13 @@ export default function CabinetEditModal({ mode, bin, cell, bins, onClose, onSav
 
       {confirmingDelete && (
         <ConfirmModal
-          title="Delete this cabinet?"
+          title={`Delete this ${noun}?`}
           message={
             occupiedCount > 0
               ? `${occupiedCount} occupied drawer${
                   occupiedCount === 1 ? '' : 's'
-                } will be benched (containers kept), then the cabinet is removed.`
-              : 'This empty cabinet will be removed.'
+                } will be benched (containers kept), then the ${noun} is removed.`
+              : `This empty ${noun} will be removed.`
           }
           confirmLabel="Delete"
           busy={saving}

@@ -103,16 +103,28 @@ tags — the primary use case. Category is a **free string** (suggestions offere
 (`slot_label()` shows the bin **label** like `Cabinet 1:A3` when set, else the code).
 `location_ref()` (also in `positions.py`) is its structured twin: `{kind: wall|chest|nested|
 freeform|benched, ...}` carried on search results and container serializers so the frontend can
-navigate without parsing the display string. The **Locations page** (`web/src/pages/LocationsPage.jsx`,
-route `/locations`) is the visual finder built on it — a Wall tab (cabinet overview →
-detail + minimap, rendered straight from `GET /bins`), a Tackle tab (drawer chests from
-`GET /chests`), and a stubbed Printer tab; search results get a "take me there" action that
-teleports via `?tab=&bin=&address=` and flashes the drawer.
+navigate without parsing the display string. A wall ref also carries `placed` (`bin.wall_row is not
+None`) so a "take me there" routes to the Wall vs Storage tab. The **Locations page**
+(`web/src/pages/LocationsPage.jsx`, route `/locations`) is the visual finder built on it — a Wall tab
+(wall-placed cabinet overview → detail + minimap, rendered straight from `GET /bins`), a Tackle tab
+(drawer chests from `GET /chests`), and a **Storage tab** (standalone, off-wall grid fixtures). Both
+search results **and the container detail page** (`ContainerPage.jsx`) get a "take me there" action —
+the shared `web/src/lib/takeMeThere.js` maps a `location_ref` to a route — that teleports via
+`?tab=&bin=&address=` and flashes the drawer.
 
-**Storage layout editor** (`prd/layout-editor.prd`) — the finder defaults to read-only, but Wall and
-Tackle each have an **"Edit layout"** toggle for *fixture* CRUD (Bins/Chests/Slots — containers stay
-read-only here, that's drag-reorg). Cabinets: `CabinetEditModal.jsx` (preset or custom band grid +
-wall-cell placement); Chests: `ChestEditModal.jsx` (label + drawer count). Backend is `routers/bins.py`
+**A `Bin` is the one generic 2D-grid fixture.** A wall cabinet (x/y) and a "storage system" (e.g. a
+printer chest, a shelf) are the same model — a band-grid of slots — differing only in whether the bin
+has a `wall_row`/`wall_col`. Placed bins → Wall tab; off-wall bins → Storage tab. `LocationsPage`
+partitions `GET /bins` client-side on `wall_row`. (A `Chest` is *also* just a 2D grid — front/back ×
+drawer — but it stays its own table/UI for the Tackle tab; folding it into `Bin` is a possible later
+migration, not done.)
+
+**Storage layout editor** (`prd/layout-editor.prd`) — the finder defaults to read-only, but Wall,
+Tackle, and Storage each have an **"Edit layout"** toggle for *fixture* CRUD (Bins/Chests/Slots —
+containers stay read-only here, that's drag-reorg). Cabinets *and* standalone storage systems share
+`CabinetEditModal.jsx` (preset or custom band grid; a `standalone` prop hides the wall-cell placement
+and lets a fixture save with no wall position — that's the "+ Add storage system" path); Chests:
+`ChestEditModal.jsx` (label + drawer count). Backend is `routers/bins.py`
 CRUD calling `positions.py` helpers; a cabinet's geometry is a **band list** (`bins.grid_spec` JSON,
 `[{cols,rows},…]`) — `addresses_for_grid()` walks bands top→bottom (continuous row #s, per-row column
 letters). Reshaping/shrinking **benches displaced occupants, never deletes** (`reconcile_bin/chest_slots`
@@ -136,3 +148,7 @@ personal data). Per-drawer positions are only parsed for Cabinet 1 so far; every
   `alembic.ini`.
 - New tables/columns require a hand-written migration in `api/alembic/versions/` (autogenerate is
   available but review the output).
+- **Auth tokens:** access token lasts `access_token_expire_minutes` (12h), refresh token 30 days.
+  `web/src/api/client.js` does a **single-flight** refresh on 401 and only wipes the session when
+  `/auth/refresh` itself returns 401 — a transient network/5xx failure leaves tokens intact so a
+  flaky connection doesn't surprise-log-out a still-valid session.

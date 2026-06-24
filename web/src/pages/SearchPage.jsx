@@ -2,23 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import api from '../api/client'
-
-// Turn a structured location_ref into a "take me there" route, or null when the
-// container has no physical spot to fly to (benched/freeform — the location text
-// already tells the user where to look).
-function takeMeThereTo(ref) {
-  if (!ref) return null
-  if (ref.kind === 'wall') {
-    return `/locations?tab=wall&bin=${ref.bin_id}&address=${encodeURIComponent(ref.address)}`
-  }
-  if (ref.kind === 'chest') {
-    return `/locations?tab=tackle`
-  }
-  if (ref.kind === 'nested') {
-    return `/containers/${ref.parent_container_id}`
-  }
-  return null
-}
+import { takeMeThereTo } from '../lib/takeMeThere'
 
 function useDebounced(value, ms) {
   const [v, setV] = useState(value)

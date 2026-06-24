@@ -5,6 +5,7 @@ import api from '../api/client'
 import { CONTAINER_TYPES } from '../constants'
 import ConfirmModal from '../components/ConfirmModal'
 import PartEditModal from '../components/PartEditModal'
+import { takeMeThereTo } from '../lib/takeMeThere'
 
 export default function ContainerPage() {
   const { id } = useParams()
@@ -105,6 +106,11 @@ export default function ContainerPage() {
             📍 {container.location}
             <span className="chip">{container.type}</span>
           </p>
+          {takeMeThereTo(container.location_ref) && (
+            <Link className="take-me-there" to={takeMeThereTo(container.location_ref)}>
+              Take me there →
+            </Link>
+          )}
         </>
       )}
 
