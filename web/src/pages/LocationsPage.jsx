@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import api from '../api/client'
 import { useDraggable } from '../dnd/DragContext'
+import CabinetEditModal from '../components/CabinetEditModal'
 
 const TABS = [
   { key: 'wall', label: 'Wall' },
@@ -84,6 +85,55 @@ function WallGrid({ bins, selectedId, onSelect, variant }) {
           <MiniCabinet bin={bin} />
         </button>
       ))}
+    </div>
+  )
+}
+
+// The wall in edit-layout mode (prd/layout-editor.prd): every existing cabinet is a
+// tap-to-edit target, and each empty cell (within the wall's extent plus one growth
+// row/col) is a "+ Add cabinet" affordance. Read-only browsing stays in WallGrid.
+function EditableWallGrid({ bins, onEdit, onAdd }) {
+  const placed = bins.filter((b) => b.wall_row && b.wall_col)
+  const maxRow = Math.max(1, ...placed.map((b) => b.wall_row))
+  const maxCol = Math.max(1, ...placed.map((b) => b.wall_col))
+  const rows = maxRow + 1
+  const cols = maxCol + 1
+  const at = (r, c) => placed.find((b) => b.wall_row === r && b.wall_col === c)
+  const cells = []
+  for (let r = 1; r <= rows; r++) {
+    for (let c = 1; c <= cols; c++) cells.push([r, c])
+  }
+  return (
+    <div
+      className="wall-grid overview editing"
+      style={{ gridTemplateColumns: `repeat(${cols}, 1fr)` }}
+    >
+      {cells.map(([r, c]) => {
+        const bin = at(r, c)
+        if (bin) {
+          return (
+            <button
+              key={bin.id}
+              className="wall-cabinet"
+              style={{ gridRow: r, gridColumn: c }}
+              onClick={() => onEdit(bin)}
+            >
+              <span className="wall-cabinet-name">{binName(bin)} ✎</span>
+              <MiniCabinet bin={bin} />
+            </button>
+          )
+        }
+        return (
+          <button
+            key={`add-${r}-${c}`}
+            className="wall-cabinet add-cell"
+            style={{ gridRow: r, gridColumn: c }}
+            onClick={() => onAdd({ row: r, col: c })}
+          >
+            + Add
+          </button>
+        )
+      })}
     </div>
   )
 }
@@ -185,6 +235,8 @@ function CabinetDetail({ bin, flashAddress, onOpenDrawer, busy }) {
 function WallTab({ selectedId, setSelectedId, flashAddress, setFlashAddress }) {
   const qc = useQueryClient()
   const navigate = useNavigate()
+  const [editMode, setEditMode] = useState(false)
+  const [editing, setEditing] = useState(null) // { mode, bin?, cell? } for the modal
   const { data: bins = [], isLoading } = useQuery({
     queryKey: ['bins'],
     queryFn: async () => (await api.get('/bins')).data,
@@ -207,8 +259,31 @@ function WallTab({ selectedId, setSelectedId, flashAddress, setFlashAddress }) {
     else if (!create.isPending) create.mutate(cell)
   }
 
+  // Entering edit-layout mode forces the overview (edits act on the whole wall).
+  const toggleEdit = () => {
+    setFlashAddress(null)
+    setSelectedId(null)
+    setEditMode((v) => !v)
+  }
+
+  // After a create/edit/delete/move, refresh the wall and close the modal.
+  const onSaved = () => {
+    qc.invalidateQueries({ queryKey: ['bins'] })
+    setEditing(null)
+  }
+
+  const editModal = editing && (
+    <CabinetEditModal
+      mode={editing.mode}
+      bin={editing.bin}
+      cell={editing.cell}
+      bins={bins}
+      onClose={() => setEditing(null)}
+      onSaved={onSaved}
+    />
+  )
+
   if (isLoading) return <p className="muted">Loading wall…</p>
-  if (bins.length === 0) return <p className="muted">No wall bins seeded yet.</p>
 
   const selected = bins.find((b) => b.id === selectedId)
 
@@ -218,10 +293,40 @@ function WallTab({ selectedId, setSelectedId, flashAddress, setFlashAddress }) {
     setSelectedId(id)
   }
 
+  if (editMode) {
+    return (
+      <div className="locations-body">
+        <div className="edit-bar">
+          <span className="hint">Tap a cabinet to edit, or an empty cell to add one.</span>
+          <button className="btn-secondary" onClick={toggleEdit}>Done</button>
+        </div>
+        <EditableWallGrid
+          bins={bins}
+          onEdit={(bin) => setEditing({ mode: 'edit', bin })}
+          onAdd={(cell) => setEditing({ mode: 'create', cell })}
+        />
+        {editModal}
+      </div>
+    )
+  }
+
+  if (bins.length === 0) {
+    return (
+      <div className="locations-body">
+        <p className="muted">No wall cabinets yet.</p>
+        <button className="link-btn" onClick={toggleEdit}>+ Add your first cabinet</button>
+        {editModal}
+      </div>
+    )
+  }
+
   if (!selected) {
     return (
       <div className="locations-body">
-        <p className="hint">Tap a cabinet to see its drawers.</p>
+        <div className="edit-bar">
+          <p className="hint">Tap a cabinet to see its drawers.</p>
+          <button className="link-btn" onClick={toggleEdit}>Edit layout</button>
+        </div>
         <WallGrid bins={bins} selectedId={null} onSelect={selectBin} variant="overview" />
       </div>
     )

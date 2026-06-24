@@ -284,3 +284,36 @@ body.dnd-dragging {
 
 h2 { margin: 4px 0; }
 h3 { margin: 8px 0 0; font-size: 15px; color: var(--muted); }
+
+/* --- Storage layout editor (prd/layout-editor.prd) ------------------------- */
+
+/* The toggle row above the wall (Edit layout / Done + hint). */
+.edit-bar { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.edit-bar .hint { flex: 1; }
+
+/* Empty wall cells become "+ Add cabinet" affordances in edit mode. */
+.wall-cabinet.add-cell {
+  align-items: center; justify-content: center; min-height: 64px;
+  border-style: dashed; color: var(--muted); font-weight: 600;
+}
+
+/* Preset quick-pick: a row of grid sketches, the active one accented. */
+.preset-pick { display: flex; gap: 8px; }
+.preset-opt {
+  flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px;
+  background: var(--surface); border: 1px solid var(--surface-2); border-radius: 8px;
+  padding: 6px; color: var(--muted); cursor: pointer; min-width: 0;
+}
+.preset-opt.active { border-color: var(--accent); color: var(--text); }
+.preset-opt .mini-cabinet.preview { width: 100%; }
+.preset-name { font-size: 11px; }
+
+/* Wall-cell picker inside the modal (place / move a cabinet). */
+.cell-picker { display: grid; gap: 4px; }
+.cell-pick {
+  aspect-ratio: 1; background: var(--surface); border: 1px solid var(--surface-2);
+  border-radius: 6px; color: var(--muted); font-size: 11px; font-weight: 600;
+  display: flex; align-items: center; justify-content: center; cursor: pointer;
+}
+.cell-pick.taken { background: var(--surface-2); color: var(--text); }
+.cell-pick.selected { border-color: var(--accent); color: var(--accent); }
