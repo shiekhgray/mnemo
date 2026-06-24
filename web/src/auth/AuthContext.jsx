@@ -5,26 +5,26 @@ const AuthContext = createContext(null)
 
 export function AuthProvider({ children }) {
   const [loggedIn, setLoggedIn] = useState(
-    () => !!localStorage.getItem('access_token')
+    () => !!localStorage.getItem('mnemo_access_token')
   )
   const [username, setUsername] = useState(
-    () => localStorage.getItem('username') ?? ''
+    () => localStorage.getItem('mnemo_username') ?? ''
   )
 
   async function login(user, password) {
     const params = new URLSearchParams({ username: user, password })
     const { data } = await axios.post('/mnemo/api/auth/login', params)
-    localStorage.setItem('access_token', data.access_token)
-    localStorage.setItem('refresh_token', data.refresh_token)
-    localStorage.setItem('username', user)
+    localStorage.setItem('mnemo_access_token', data.access_token)
+    localStorage.setItem('mnemo_refresh_token', data.refresh_token)
+    localStorage.setItem('mnemo_username', user)
     setUsername(user)
     setLoggedIn(true)
   }
 
   function logout() {
-    localStorage.removeItem('access_token')
-    localStorage.removeItem('refresh_token')
-    localStorage.removeItem('username')
+    localStorage.removeItem('mnemo_access_token')
+    localStorage.removeItem('mnemo_refresh_token')
+    localStorage.removeItem('mnemo_username')
     setUsername('')
     setLoggedIn(false)
   }

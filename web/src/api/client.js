@@ -4,7 +4,7 @@ const api = axios.create({ baseURL: '/mnemo/api' })
 
 // Attach access token to every request
 api.interceptors.request.use((config) => {
-  const token = localStorage.getItem('access_token')
+  const token = localStorage.getItem('mnemo_access_token')
   if (token) config.headers.Authorization = `Bearer ${token}`
   return config
 })
@@ -12,8 +12,8 @@ api.interceptors.request.use((config) => {
 // Wipe the session and bounce to login — only for a *genuine* auth failure (the
 // refresh token itself is invalid/expired), never for a transient network blip.
 function hardLogout() {
-  localStorage.removeItem('access_token')
-  localStorage.removeItem('refresh_token')
+  localStorage.removeItem('mnemo_access_token')
+  localStorage.removeItem('mnemo_refresh_token')
   if (!window.location.pathname.endsWith('/login')) {
     window.location.href = '/mnemo/login'
   }
@@ -32,12 +32,12 @@ let refreshPromise = null
 
 function refreshAccessToken() {
   if (!refreshPromise) {
-    const refresh = localStorage.getItem('refresh_token')
+    const refresh = localStorage.getItem('mnemo_refresh_token')
     if (!refresh) return Promise.reject({ sessionDead: true })
     refreshPromise = axios
       .post('/mnemo/api/auth/refresh', { refresh_token: refresh })
       .then(({ data }) => {
-        localStorage.setItem('access_token', data.access_token)
+        localStorage.setItem('mnemo_access_token', data.access_token)
         return data.access_token
       })
       .catch((err) => {
