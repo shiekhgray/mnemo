@@ -33,6 +33,35 @@ def resolve_location(container: models.Container, _depth: int = 0) -> str:
     return "benched"
 
 
+def location_ref(container: models.Container) -> dict:
+    """Structured counterpart to resolve_location(): a machine-readable reference
+    the frontend uses to pick which tab/cabinet/drawer to open and what to flash,
+    without parsing the human-readable string. Mirrors the location_ref shape in
+    prd/locations.prd. Renders from existing data — no migration needed."""
+    if container.slot_id is not None and container.slot is not None:
+        slot = container.slot
+        if slot.kind == "wall" and slot.bin is not None:
+            return {
+                "kind": "wall",
+                "bin_id": slot.bin.id,
+                "bin_code": slot.bin.code,
+                "bin_label": slot.bin.label,
+                "address": slot.address,
+            }
+        if slot.kind == "chest" and slot.chest is not None:
+            return {
+                "kind": "chest",
+                "chest_id": slot.chest.id,
+                "drawer_number": slot.drawer_number,
+                "box_position": slot.box_position,
+            }
+    if container.freeform_location:
+        return {"kind": "freeform", "text": container.freeform_location}
+    if container.parent_container_id is not None and container.parent is not None:
+        return {"kind": "nested", "parent_container_id": container.parent_container_id}
+    return {"kind": "benched"}
+
+
 def bench(container: models.Container) -> None:
     """Clear all position fields (no commit)."""
     container.slot_id = None

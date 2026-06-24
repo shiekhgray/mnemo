@@ -7,6 +7,7 @@ import AddPartPage from './pages/AddPartPage'
 import ContainersPage from './pages/ContainersPage'
 import ContainerPage from './pages/ContainerPage'
 import BenchedPage from './pages/BenchedPage'
+import LocationsPage from './pages/LocationsPage'
 
 function RequireAuth({ children }) {
   const { loggedIn } = useAuth()
@@ -28,6 +29,7 @@ export default function App() {
         <Route path="containers" element={<ContainersPage />} />
         <Route path="containers/:id" element={<ContainerPage />} />
         <Route path="benched" element={<BenchedPage />} />
+        <Route path="locations" element={<LocationsPage />} />
       </Route>
     </Routes>
   )

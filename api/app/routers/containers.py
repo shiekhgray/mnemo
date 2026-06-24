@@ -4,7 +4,9 @@ from sqlalchemy.orm import Session
 from app import models
 from app.auth import get_current_user
 from app.database import get_db
-from app.positions import apply_position, assign_slot, bench, resolve_location
+from app.positions import (
+    apply_position, assign_slot, bench, location_ref, resolve_location,
+)
 
 router = APIRouter(
     prefix="/containers", tags=["containers"], dependencies=[Depends(get_current_user)]
@@ -20,6 +22,7 @@ def serialize(c: models.Container, db: Session) -> dict:
         "freeform_location": c.freeform_location,
         "parent_container_id": c.parent_container_id,
         "location": resolve_location(c),
+        "location_ref": location_ref(c),
         "benched": c.slot_id is None
         and c.freeform_location is None
         and c.parent_container_id is None,
@@ -73,7 +76,12 @@ def get_location(container_id: int, db: Session = Depends(get_db)):
     c = db.get(models.Container, container_id)
     if c is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Container not found")
-    return {"id": c.id, "label": c.label, "location": resolve_location(c)}
+    return {
+        "id": c.id,
+        "label": c.label,
+        "location": resolve_location(c),
+        "location_ref": location_ref(c),
+    }
 
 
 @router.post("", status_code=201)

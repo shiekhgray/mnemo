@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app import models
 from app.auth import get_current_user
 from app.database import get_db
-from app.positions import resolve_location
+from app.positions import location_ref, resolve_location
 
 router = APIRouter(prefix="/parts", tags=["parts"], dependencies=[Depends(get_current_user)])
 
@@ -20,6 +20,7 @@ def serialize(part: models.Part) -> dict:
         "container_id": part.container_id,
         "container_label": part.container.label if part.container else None,
         "location": resolve_location(part.container) if part.container else None,
+        "location_ref": location_ref(part.container) if part.container else None,
     }
 
 

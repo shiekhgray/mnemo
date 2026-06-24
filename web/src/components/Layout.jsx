@@ -31,6 +31,7 @@ export default function Layout() {
       <nav className="tab-bar">
         <NavLink to="/" end>Search</NavLink>
         <NavLink to="/add">Add</NavLink>
+        <NavLink to="/locations">Locations</NavLink>
         <NavLink to="/containers">Containers</NavLink>
         <NavLink to="/benched">Benched</NavLink>
       </nav>
