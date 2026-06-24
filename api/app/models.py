@@ -1,5 +1,5 @@
 from sqlalchemy import (
-    ARRAY, CheckConstraint, Column, ForeignKey, Integer, String, Text,
+    ARRAY, CheckConstraint, Column, ForeignKey, Integer, JSON, String, Text,
     UniqueConstraint,
 )
 from sqlalchemy.orm import relationship
@@ -26,11 +26,22 @@ class Bin(Base):
     id = Column(Integer, primary_key=True)
     code = Column(String(16), unique=True, nullable=False)  # e.g. "W-B2"
     label = Column(String(255))
-    type = Column(String(16), nullable=False)  # all-narrow | all-wide | half-half
-    wall_row = Column(Integer)  # 1..3 in the 3x4 wall grid
-    wall_col = Column(Integer)  # 1..4
+    type = Column(String(16), nullable=False)  # all-narrow | all-wide | half-half | custom
+    # The grid as an ordered list of bands, each a rectangle of equal cells:
+    # [{"cols": N, "rows": M}, ...]. The slot addresses are an emergent property of
+    # this (see positions.addresses_for_grid); persisted because reconstructing bands
+    # from addresses alone is lossy. `type` is now only a preset hint / label.
+    grid_spec = Column(JSON)
+    wall_row = Column(Integer)  # row in the wall grid (1-based, top->bottom)
+    wall_col = Column(Integer)  # col in the wall grid (1-based, left->right)
 
     slots = relationship("Slot", back_populates="bin", cascade="all, delete-orphan")
+
+    __table_args__ = (
+        # One cabinet per wall cell. Postgres allows multiple NULLs, so unplaced
+        # bins are unaffected; placement edits can't silently collide.
+        UniqueConstraint("wall_row", "wall_col", name="uq_bin_wall_cell"),
+    )
 
 
 class Chest(Base):
@@ -89,7 +100,14 @@ class Container(Base):
     type = Column(String(16), nullable=False, default="other")
     # wall_drawer | tackle_box | printed_box | freeform | other
 
-    slot_id = Column(Integer, ForeignKey("slots.id"), unique=True)  # unique: one container per slot
+    # unique: one container per slot. ON DELETE SET NULL so removing a slot (e.g.
+    # shrinking/deleting a unit) benches the occupant rather than erroring — the
+    # helpers in positions.py also bench explicitly, this is defence in depth.
+    slot_id = Column(
+        Integer,
+        ForeignKey("slots.id", ondelete="SET NULL", name="fk_containers_slot"),
+        unique=True,
+    )
     freeform_location = Column(Text)
     parent_container_id = Column(Integer, ForeignKey("containers.id"))
 

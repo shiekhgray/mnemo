@@ -25,21 +25,16 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from app.database import SessionLocal
 from app import models
-
-LETTERS = "ABCDEFGHIJKLMNOP"
+from app.positions import PRESETS, addresses_for_grid
 
 
 def addresses_for(bin_type: str) -> list[str]:
-    """Generate every drawer address for a bin of the given type."""
-    if bin_type == "all-narrow":
-        return [f"{LETTERS[c]}{r}" for r in range(1, 9) for c in range(8)]
-    if bin_type == "all-wide":
-        return [f"{LETTERS[c]}{r}" for r in range(1, 7) for c in range(4)]
-    if bin_type == "half-half":
-        top = [f"{LETTERS[c]}{r}" for r in range(1, 5) for c in range(8)]    # narrow A1-H4
-        bottom = [f"{LETTERS[c]}{r}" for r in range(5, 8) for c in range(4)]  # wide A5-D7
-        return top + bottom
-    raise ValueError(f"unknown bin type: {bin_type}")
+    """Generate every drawer address for a bin of the given preset type. Thin
+    wrapper over the canonical band logic in app.positions (single source of
+    truth, shared with the GUI layout editor)."""
+    if bin_type not in PRESETS:
+        raise ValueError(f"unknown bin type: {bin_type}")
+    return addresses_for_grid(PRESETS[bin_type])
 
 
 # Real wall, parsed from wall_photos/ and confirmed by Graham (2026-06-24); recorded in
@@ -76,7 +71,10 @@ def seed_bins(db) -> None:
         if db.query(models.Bin).filter_by(code=code).first():
             print(f"bin {code} exists, skipping")
             continue
-        b = models.Bin(code=code, type=btype, wall_row=row, wall_col=col, label=label or None)
+        b = models.Bin(
+            code=code, type=btype, grid_spec=PRESETS[btype],
+            wall_row=row, wall_col=col, label=label or None,
+        )
         db.add(b)
         db.flush()
         for addr in addresses_for(btype):
